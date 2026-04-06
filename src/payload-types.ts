@@ -95,8 +95,12 @@ export interface Config {
     defaultIDType: number;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    'storefront-home': StorefrontHome;
+  };
+  globalsSelect: {
+    'storefront-home': StorefrontHomeSelect<false> | StorefrontHomeSelect<true>;
+  };
   locale: null;
   widgets: {
     collections: CollectionsWidget;
@@ -180,6 +184,10 @@ export interface Category {
    * Boş bırakılırsa kategori adından üretilir.
    */
   slug: string;
+  /**
+   * Ana sayfa kategori kutularında ve vitrinde kullanılır (isteğe bağlı).
+   */
+  image?: (number | null) | Media;
   updatedAt: string;
   createdAt: string;
 }
@@ -423,6 +431,7 @@ export interface MediaSelect<T extends boolean = true> {
 export interface CategoriesSelect<T extends boolean = true> {
   name?: T;
   slug?: T;
+  image?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -522,6 +531,89 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * Ana sayfa hero ve sıralı bölümler (kategori şeridi, ürün rafları, banner). Boş bölüm bırakılabilir.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "storefront-home".
+ */
+export interface StorefrontHome {
+  id: number;
+  heroTitle?: string | null;
+  heroSubtitle?: string | null;
+  heroImage?: (number | null) | Media;
+  heroHref?: string | null;
+  sections?:
+    | (
+        | {
+            title?: string | null;
+            categories: (number | Category)[];
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'categoryStrip';
+          }
+        | {
+            title?: string | null;
+            products: (number | Product)[];
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'productShelf';
+          }
+        | {
+            image: number | Media;
+            title?: string | null;
+            href?: string | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'banner';
+          }
+      )[]
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "storefront-home_select".
+ */
+export interface StorefrontHomeSelect<T extends boolean = true> {
+  heroTitle?: T;
+  heroSubtitle?: T;
+  heroImage?: T;
+  heroHref?: T;
+  sections?:
+    | T
+    | {
+        categoryStrip?:
+          | T
+          | {
+              title?: T;
+              categories?: T;
+              id?: T;
+              blockName?: T;
+            };
+        productShelf?:
+          | T
+          | {
+              title?: T;
+              products?: T;
+              id?: T;
+              blockName?: T;
+            };
+        banner?:
+          | T
+          | {
+              image?: T;
+              title?: T;
+              href?: T;
+              id?: T;
+              blockName?: T;
+            };
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

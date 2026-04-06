@@ -44,5 +44,14 @@ export const Categories: CollectionConfig = {
         description: 'Boş bırakılırsa kategori adından üretilir.',
       },
     },
+    {
+      name: 'image',
+      type: 'upload',
+      relationTo: 'media',
+      label: 'Vitrin görseli',
+      admin: {
+        description: 'Ana sayfa kategori kutularında ve vitrinde kullanılır (isteğe bağlı).',
+      },
+    },
   ],
 }
