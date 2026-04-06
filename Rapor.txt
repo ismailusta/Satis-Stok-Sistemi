@@ -1,0 +1,45 @@
+Market POS ve E-Ticaret Entegrasyon Projesi Raporu
+1. Proje Özeti ve Amacı
+
+Bu proje, fiziksel market satışları (POS) ile online mağaza satışlarının tek bir merkezden, eşzamanlı olarak yönetilmesini hedefler. Temel amaç, stok tutarsızlıklarını önlemek, barkodlu hızlı satış altyapısı kurmak ve tüm verileri (satış, iade, stok) anlık olarak senkronize etmektir.
+2. Mimari ve Teknoloji Yığını
+
+    Merkezi Yönetim (Admin Paneli) ve API: Payload CMS sürüm 3.60.0
+
+    Veritabanı: PostgreSQL (Anlık stok takibi ve hatasız veri işlemleri için)
+
+    Web Müşteri Vitrini ve POS Kasa Arayüzü: Next.js
+
+    Mobil Uygulama (Müşteriler veya Patron için): React Native
+
+    Altyapı ve Dağıtım: Sunucu tarafı izolasyonu için Docker, ön yüz (frontend) dağıtımı için Vercel
+
+    Versiyon Kontrolü ve İşbirliği: GitHub
+
+3. Temel Sistem Modülleri
+
+    Stok ve Envanter Yönetimi: Barkod tanımlama, varyasyonlu ürün girişi, maliyet/kâr hesaplaması ve azalan stok için otomatik bildirimler.
+
+    Fiziki Kasa (POS) Modülü: Tarayıcı üzerinde çalışan çok hızlı satış ekranı, çevrimdışı önbellekleme yeteneği, nakit/kart parçalı ödeme ve iade/iptal işlemleri.
+
+    Online Mağaza Modülü: Mobil uyumlu alışveriş deneyimi, üyelik sistemi, sepet yönetimi, sanal POS entegrasyonu ve sipariş durumu takibi.
+
+    Raporlama ve Analiz: Günlük kasa özeti, online vs. fiziki ciro karşılaştırması ve en çok/en az satan ürün analizleri.
+
+4. Donanım Entegrasyon Planı
+
+    Ana Sistem (POS PC): Kasiyerin kullanacağı, Next.js uygulamasının tam ekran (Kiosk modunda) çalışacağı dokunmatik ekranlı standart bilgisayar.
+
+    Barkod Okuyucu: USB tak-çalıştır cihazı. Sisteme klavye gibi bağlanarak okutulan barkodu anında arama kutusuna yazar.
+
+    Termal Fiş Yazıcı: Arka planda çalışan bir aracı yazılım (örn. QZ Tray) ile sisteme entegre edilecek. Kasiyer işlemi onayladığı an web üzerinden donanıma yazdırma komutu gidecek.
+
+    Para Çekmecesi: Doğrudan fiş yazıcısına bağlanacak. Nakit ödeme alındığında sistemden giden komutla yazıcı üzerinden tetiklenerek otomatik açılacak.
+
+5. Veritabanı Planlaması (Özet)
+
+    Ürünler (Products): Barkod, Ad, Kategori, Alış_Fiyatı, Satış_Fiyatı, KDV, Mevcut_Stok.
+
+    Siparişler (Orders): Sipariş_No, Kaynak (Fiziki/Online), Toplam_Tutar, Satılan_Ürünler_Dizisi, Tarih.
+
+    Müşteriler (Customers): Ad, Telefon, Adres, Sipariş_Geçmişi (Sadece online veya kayıtlı veresiye müşteriler için).
