@@ -1,6 +1,13 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react'
 
 import {
   applyLineRefunds,
@@ -11,7 +18,7 @@ import {
   refreshCartStock,
   submitOrderRefund,
   submitPosSale,
-  type PosCategory,
+  type PosCategoryGroup,
   type PosPaymentMethod,
   type PosProduct,
   type StockSnapshot,
@@ -25,6 +32,7 @@ type CartLine = {
   quantity: number
   maxStock: number
   imageUrl: string | null
+  barcode: string
 }
 
 const STOCK_POLL_MS = 6000
@@ -66,6 +74,7 @@ function mergeCartWithStock(
       quantity: qty,
       maxStock: snap.stock,
       imageUrl: snap.imageUrl ?? line.imageUrl ?? null,
+      barcode: line.barcode,
     })
   }
 
@@ -121,10 +130,11 @@ export function PosClient() {
   const cashInputRef = useRef<HTMLInputElement>(null)
   const cartRef = useRef<CartLine[]>([])
 
-  const [categories, setCategories] = useState<PosCategory[]>([])
+  const [categoryGroups, setCategoryGroups] = useState<PosCategoryGroup[]>([])
   const [categoryId, setCategoryId] = useState<string>('all')
   const [catalogProducts, setCatalogProducts] = useState<PosProduct[]>([])
   const [productSearch, setProductSearch] = useState('')
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
 
   const [refundInput, setRefundInput] = useState('')
   const [refundPreview, setRefundPreview] = useState<RefundPreview | null>(null)
@@ -165,7 +175,7 @@ export function PosClient() {
   useEffect(() => {
     startTransition(async () => {
       const res = await listCategoriesForPos()
-      if (res.ok) setCategories(res.categories)
+      if (res.ok) setCategoryGroups(res.groups)
     })
   }, [])
 
@@ -233,6 +243,7 @@ export function PosClient() {
             quantity: q,
             maxStock: product.stock,
             imageUrl: product.imageUrl ?? null,
+            barcode: product.barcode,
           },
         ]
       }
@@ -252,7 +263,15 @@ export function PosClient() {
       return next
     })
     setMessage(null)
+    setSelectedProductId(product.id)
   }
+
+  useEffect(() => {
+    if (!selectedProductId) return
+    if (!cart.some((l) => l.productId === selectedProductId)) {
+      setSelectedProductId(null)
+    }
+  }, [cart, selectedProductId])
 
   const handleBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -366,6 +385,7 @@ export function PosClient() {
         }
         closePaymentModal()
         setCart([])
+        setSelectedProductId(null)
         setMessage({
           type: 'ok',
           text: `Satış tamam: ${res.orderNumber}`,
@@ -411,6 +431,7 @@ export function PosClient() {
         if (mode === 'sale' && cartRef.current.length > 0) {
           e.preventDefault()
           setCart([])
+          setSelectedProductId(null)
           setMessage({ type: 'info', text: 'Sepet temizlendi.' })
         }
         return
@@ -525,6 +546,21 @@ export function PosClient() {
       : true,
   )
 
+  const selectedLine = useMemo(() => {
+    if (!selectedProductId) return null
+    return cart.find((l) => l.productId === selectedProductId) ?? null
+  }, [cart, selectedProductId])
+
+  const activeRootGroupId = useMemo(() => {
+    if (categoryId === 'all') return 'all'
+    for (const g of categoryGroups) {
+      if (g.id === categoryId || g.chips.some((c) => c.id === categoryId)) {
+        return g.id
+      }
+    }
+    return 'all'
+  }, [categoryId, categoryGroups])
+
   const switchMode = (next: Mode) => {
     setMode(next)
     setMessage(null)
@@ -536,36 +572,30 @@ export function PosClient() {
 
   return (
     <div className={styles.wrap}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>POS</h1>
-        <div className={styles.tabs} role="tablist">
-          <button
-            className={mode === 'sale' ? styles.tabActive : styles.tab}
-            onClick={() => switchMode('sale')}
-            type="button"
-          >
-            Satış
-          </button>
-          <button
-            className={mode === 'refund' ? styles.tabActive : styles.tab}
-            onClick={() => switchMode('refund')}
-            type="button"
-          >
-            İade
-          </button>
-        </div>
-        {mode === 'sale' && (
-          <p className={styles.hint}>
-            Katalog veya barkod (çoklu: 5×barkod) · <strong>F9</strong> ödeme ·{' '}
-            <strong>ESC</strong> sepeti temizle.
-          </p>
-        )}
-        {mode === 'refund' && (
+      {mode === 'refund' ? (
+        <header className={styles.header}>
+          <h1 className={styles.title}>POS</h1>
+          <div className={styles.tabs} role="tablist">
+            <button
+              className={styles.tab}
+              onClick={() => switchMode('sale')}
+              type="button"
+            >
+              Satış
+            </button>
+            <button
+              className={styles.tabActive}
+              onClick={() => switchMode('refund')}
+              type="button"
+            >
+              İade
+            </button>
+          </div>
           <p className={styles.hint}>
             Tamamlanmış veya kısmi iade sipariş numarasını girin (ör. ORD-…).
           </p>
-        )}
-      </header>
+        </header>
+      ) : null}
 
       {message && (
         <div
@@ -584,146 +614,237 @@ export function PosClient() {
 
       {mode === 'sale' ? (
         <>
-          <div className={styles.saleLayout}>
-            <section className={styles.catalog} aria-label="Ürün kataloğu">
-              <h2 className={styles.catalogTitle}>Katalog</h2>
-              <div className={styles.chips}>
-                <button
-                  className={categoryId === 'all' ? styles.chipActive : styles.chip}
-                  onClick={() => setCategoryId('all')}
-                  type="button"
-                >
-                  Tümü
-                </button>
-                {categories.map((c) => (
+          <div className={styles.posSaleShell}>
+            <div className={styles.posTopBand}>
+              <div className={styles.posTopBandLeft}>
+                <span className={styles.posBrand}>POS</span>
+                <div className={styles.tabs} role="tablist">
+                  <button className={styles.tabActive} type="button">
+                    Satış
+                  </button>
                   <button
-                    key={c.id}
-                    className={categoryId === c.id ? styles.chipActive : styles.chip}
-                    onClick={() => setCategoryId(c.id)}
+                    className={styles.tab}
+                    onClick={() => switchMode('refund')}
                     type="button"
                   >
-                    {c.name}
+                    İade
                   </button>
-                ))}
+                </div>
               </div>
-              <input
-                className={styles.searchInput}
-                onChange={(e) => setProductSearch(e.target.value)}
-                placeholder="Ürün veya barkod ara…"
-                type="search"
-                value={productSearch}
-              />
-              <div className={styles.productGrid}>
-                {filteredCatalog.map((p) => (
-                  <button
-                    className={styles.productCard}
-                    disabled={isPending || p.stock < 1}
-                    key={p.id}
-                    onClick={() => addToCart(p)}
-                    type="button"
-                  >
-                    <div className={styles.productThumbWrap}>
-                      {p.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img alt="" className={styles.productThumb} src={p.imageUrl} />
-                      ) : (
-                        <div className={styles.productThumbPlaceholder}>
-                          {p.name.slice(0, 1).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                    <span className={styles.productName}>{p.name}</span>
-                    <span className={styles.productMeta}>
-                      {p.salePrice.toFixed(2)} ₺ · Stok {p.stock}
-                    </span>
-                  </button>
-                ))}
+              <div aria-live="polite" className={styles.posTotalBoard}>
+                <span className={styles.posTotalBoardLabel}>TOPLAM</span>
+                <span className={styles.posTotalBoardValue}>{total.toFixed(2)}</span>
+                <span className={styles.posTotalBoardCur}>₺</span>
               </div>
-              {filteredCatalog.length === 0 && (
-                <p className={styles.empty}>Bu filtreye uygun ürün yok.</p>
-              )}
-            </section>
+            </div>
+            <p className={styles.posMicroHint}>
+              Barkod (5×barkod) · <strong>F9</strong> ödeme · <strong>ESC</strong> sepet temizle
+            </p>
 
-            <div className={styles.saleCol}>
-              <form className={styles.scan} onSubmit={handleBarcodeSubmit}>
+            <form className={styles.posBarcodeBand} onSubmit={handleBarcodeSubmit}>
+              <label className={styles.posBarcodeLbl} htmlFor="pos-bc-inp">
+                BARKOD
+              </label>
+              <div className={styles.posBarcodeTrack}>
                 <input
                   ref={inputRef}
                   autoComplete="off"
-                  className={styles.barcodeInput}
+                  className={styles.posBarcodeInput}
+                  id="pos-bc-inp"
                   inputMode="numeric"
                   name="barcode"
                   onChange={(e) => setBarcode(e.target.value)}
-                  placeholder="Barkod veya 5×barkod…"
+                  placeholder="barkodu girin"
                   value={barcode}
                 />
                 <button className={styles.btnSecondary} disabled={isPending} type="submit">
                   Ekle
                 </button>
-              </form>
+              </div>
+            </form>
 
-              <section className={styles.cart}>
-                <h2 className={styles.cartTitle}>Sepet</h2>
-                {cart.length === 0 ? (
-                  <p className={styles.empty}>Henüz ürün yok.</p>
-                ) : (
-                  <ul className={styles.lines}>
-                    {cart.map((line) => (
-                      <li className={styles.line} key={line.productId}>
-                        <div className={styles.lineRow}>
-                          {line.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img alt="" className={styles.cartThumb} src={line.imageUrl} />
-                          ) : (
-                            <div className={styles.cartThumbPlaceholder}>
-                              {line.name.slice(0, 1).toUpperCase()}
-                            </div>
-                          )}
-                          <div className={styles.lineInfo}>
-                            <span className={styles.lineName}>{line.name}</span>
-                          <span className={styles.linePrice}>
-                            {line.unitPrice.toFixed(2)} ₺ × {line.quantity} ={' '}
-                            {(line.unitPrice * line.quantity).toFixed(2)} ₺
-                            <span className={styles.stockHint}> · Stok: {line.maxStock}</span>
-                          </span>
+            <div className={styles.posDesk}>
+              <section className={styles.posPaneLeft} aria-label="Sepet">
+                <h2 className={styles.posPaneTitle}>Sepet</h2>
+                <div className={styles.cartTableWrap}>
+                  {cart.length === 0 ? (
+                    <p className={styles.empty}>Henüz ürün yok.</p>
+                  ) : (
+                    <table className={styles.cartTable}>
+                      <thead>
+                        <tr>
+                          <th>Barkod</th>
+                          <th>Ürün</th>
+                          <th className={styles.colNum}>Birim</th>
+                          <th className={styles.colNum}>Adet</th>
+                          <th className={styles.colNum}>Tutar</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cart.map((line) => (
+                          <tr
+                            className={
+                              selectedProductId === line.productId
+                                ? styles.cartRowActive
+                                : undefined
+                            }
+                            key={line.productId}
+                            onClick={() => setSelectedProductId(line.productId)}
+                          >
+                            <td className={styles.cellMuted}>{line.barcode || '—'}</td>
+                            <td>{line.name}</td>
+                            <td className={styles.colNum}>{line.unitPrice.toFixed(2)}</td>
+                            <td className={styles.colNum}>{line.quantity}</td>
+                            <td className={styles.colNum}>
+                              <strong>
+                                {(line.unitPrice * line.quantity).toFixed(2)}
+                              </strong>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
+
+              <section className={styles.posPaneMid} aria-label="Seçili ürün">
+                <div className={styles.posPreviewBox}>
+                  {selectedLine ? (
+                    selectedLine.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        alt=""
+                        className={styles.posPreviewImg}
+                        src={selectedLine.imageUrl}
+                      />
+                    ) : (
+                      <div className={styles.posPreviewPh}>
+                        {selectedLine.name.slice(0, 1).toUpperCase()}
+                      </div>
+                    )
+                  ) : (
+                    <span className={styles.posPreviewEmpty}>Satır seçin</span>
+                  )}
+                </div>
+                <div className={styles.posMidActions}>
+                  <button
+                    className={styles.posMidBtn}
+                    disabled={!selectedLine || isPending}
+                    onClick={() =>
+                      selectedLine &&
+                      setQty(selectedLine.productId, selectedLine.quantity + 1)
+                    }
+                    type="button"
+                  >
+                    Artır
+                  </button>
+                  <button
+                    className={styles.posMidBtn}
+                    disabled={!selectedLine || isPending}
+                    onClick={() =>
+                      selectedLine &&
+                      setQty(selectedLine.productId, selectedLine.quantity - 1)
+                    }
+                    type="button"
+                  >
+                    Azalt
+                  </button>
+                  <button
+                    className={styles.posMidBtnDanger}
+                    disabled={!selectedLine || isPending}
+                    onClick={() =>
+                      selectedLine && removeLine(selectedLine.productId)
+                    }
+                    type="button"
+                  >
+                    Sil
+                  </button>
+                </div>
+              </section>
+
+              <section className={styles.posPaneRight} aria-label="Ürün kataloğu">
+                <h2 className={styles.posPaneTitle}>Ürünler</h2>
+                <div className={styles.posRootTabs}>
+                  <button
+                    className={
+                      activeRootGroupId === 'all' ? styles.posRootTabOn : styles.posRootTab
+                    }
+                    onClick={() => setCategoryId('all')}
+                    type="button"
+                  >
+                    TÜMÜ
+                  </button>
+                  {categoryGroups.map((g) => (
+                    <button
+                      className={
+                        activeRootGroupId === g.id ? styles.posRootTabOn : styles.posRootTab
+                      }
+                      key={g.id}
+                      onClick={() => setCategoryId(g.chips[0].id)}
+                      type="button"
+                    >
+                      {(g.title ?? g.chips[0]?.label ?? '—').toLocaleUpperCase('tr')}
+                    </button>
+                  ))}
+                </div>
+                {activeRootGroupId !== 'all' ? (
+                  <div className={styles.posSubChips}>
+                    {categoryGroups
+                      .find((g) => g.id === activeRootGroupId)
+                      ?.chips.map((c) => (
+                        <button
+                          className={categoryId === c.id ? styles.chipActive : styles.chip}
+                          key={`${activeRootGroupId}-${c.id}`}
+                          onClick={() => setCategoryId(c.id)}
+                          type="button"
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                  </div>
+                ) : null}
+                <input
+                  className={styles.searchInput}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="Ürün veya barkod ara…"
+                  type="search"
+                  value={productSearch}
+                />
+                <div className={styles.posProductGrid}>
+                  {filteredCatalog.map((p) => (
+                    <button
+                      className={styles.productCard}
+                      disabled={isPending || p.stock < 1}
+                      key={p.id}
+                      onClick={() => addToCart(p)}
+                      type="button"
+                    >
+                      <div className={styles.productThumbWrap}>
+                        {p.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img alt="" className={styles.productThumb} src={p.imageUrl} />
+                        ) : (
+                          <div className={styles.productThumbPlaceholder}>
+                            {p.name.slice(0, 1).toUpperCase()}
                           </div>
-                        </div>
-                        <div className={styles.lineActions}>
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => setQty(line.productId, line.quantity - 1)}
-                            type="button"
-                          >
-                            −
-                          </button>
-                          <span className={styles.qty}>{line.quantity}</span>
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => setQty(line.productId, line.quantity + 1)}
-                            type="button"
-                          >
-                            +
-                          </button>
-                          <button
-                            className={styles.removeBtn}
-                            onClick={() => removeLine(line.productId)}
-                            type="button"
-                          >
-                            Kaldır
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                        )}
+                      </div>
+                      <span className={styles.productNameKiosk}>{p.name}</span>
+                      <span className={styles.productMeta}>
+                        {p.salePrice.toFixed(2)} ₺ · Stok {p.stock}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {filteredCatalog.length === 0 ? (
+                  <p className={styles.empty}>Bu filtreye uygun ürün yok.</p>
+                ) : null}
               </section>
             </div>
           </div>
 
           <footer className={styles.footer}>
-            <div className={styles.totalRow}>
-              <span>Toplam</span>
-              <strong className={styles.total}>{total.toFixed(2)} ₺</strong>
-            </div>
             <button
               className={styles.payBtn}
               disabled={isPending || cart.length === 0}

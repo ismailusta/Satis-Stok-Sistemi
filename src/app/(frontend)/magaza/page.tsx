@@ -4,7 +4,7 @@ import { getStorefrontHome } from './actions'
 import { MagazaHomeClient } from './magaza-home-client'
 
 export const metadata = {
-  title: 'Mağaza',
+  title: 'Westcoast Corner Shop',
   description: 'Online alışveriş',
 }
 

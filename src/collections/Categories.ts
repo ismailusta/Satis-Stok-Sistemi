@@ -14,19 +14,61 @@ export const Categories: CollectionConfig = {
   slug: 'categories',
   admin: {
     useAsTitle: 'name',
-    defaultColumns: ['name', 'slug'],
+    defaultColumns: ['name', 'parent', 'slug'],
   },
   hooks: {
     beforeChange: [
-      ({ data }) => {
+      async ({ data, req, originalDoc }) => {
         if (data.name && !data.slug) {
           data.slug = slugify(data.name)
         }
+
+        const parentRef = data.parent
+        if (!parentRef) {
+          return data
+        }
+
+        const parentId =
+          typeof parentRef === 'object' && parentRef && 'id' in parentRef
+            ? (parentRef as { id: unknown }).id
+            : parentRef
+
+        const selfId = originalDoc?.id
+        if (selfId != null && String(selfId) === String(parentId)) {
+          throw new Error('Kategori kendi üst kategorisi olamaz.')
+        }
+
+        const parentDoc = await req.payload.findByID({
+          collection: 'categories',
+          id: parentId as string | number,
+          depth: 0,
+          overrideAccess: true,
+        })
+
+        if (parentDoc?.parent) {
+          throw new Error(
+            'En fazla iki seviye: alt kategorinin üstü, kök (başka alt kategori) olmalı.',
+          )
+        }
+
         return data
       },
     ],
   },
   fields: [
+    {
+      name: 'parent',
+      type: 'relationship',
+      relationTo: 'categories',
+      label: 'Üst kategori',
+      admin: {
+        position: 'sidebar',
+        description:
+          'Boş bırakırsanız bu bir üst kategoridir (ör. Temel Atıştırmalık). Doluysa alt kategori (ör. Cips).',
+      },
+      filterOptions: ({ id }) =>
+        id ? ({ id: { not_equals: id } } as const) : (true as const),
+    },
     {
       name: 'name',
       type: 'text',

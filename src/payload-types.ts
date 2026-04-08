@@ -179,6 +179,10 @@ export interface Media {
  */
 export interface Category {
   id: number;
+  /**
+   * Boş bırakırsanız bu bir üst kategoridir (ör. Temel Atıştırmalık). Doluysa alt kategori (ör. Cips).
+   */
+  parent?: (number | null) | Category;
   name: string;
   /**
    * Boş bırakılırsa kategori adından üretilir.
@@ -429,6 +433,7 @@ export interface MediaSelect<T extends boolean = true> {
  * via the `definition` "categories_select".
  */
 export interface CategoriesSelect<T extends boolean = true> {
+  parent?: T;
   name?: T;
   slug?: T;
   image?: T;

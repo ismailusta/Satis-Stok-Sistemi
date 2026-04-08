@@ -126,11 +126,35 @@ export async function refreshCartStock(productIds: string[]): Promise<StockRefre
   return { ok: true, lines }
 }
 
-export type PosCategory = { id: string; name: string; slug: string }
+/** POS katalog filtresi: üst kategori başlığı + chip’ler (Tümü + alt kategoriler veya tek kök). */
+export type PosCategoryChip = { id: string; label: string }
+
+export type PosCategoryGroup = {
+  id: string
+  /** Alt kategori varsa üst adı; yoksa başlık gösterilmez */
+  title: string | null
+  chips: PosCategoryChip[]
+}
 
 export type CategoriesResult =
-  | { ok: true; categories: PosCategory[] }
+  | { ok: true; groups: PosCategoryGroup[] }
   | { ok: false; error: string }
+
+function categoryParentIdRaw(
+  c: { parent?: unknown },
+  validIds: Set<string>,
+): string | null {
+  const raw = c.parent
+  if (raw == null || raw === false) return null
+  let pid: string | null = null
+  if (typeof raw === 'object' && raw && 'id' in raw) {
+    pid = String((raw as { id: unknown }).id)
+  } else if (typeof raw === 'string' || typeof raw === 'number') {
+    pid = String(raw)
+  }
+  if (!pid || !validIds.has(pid)) return null
+  return pid
+}
 
 export async function listCategoriesForPos(): Promise<CategoriesResult> {
   const { payload, user } = await requireStaff()
@@ -142,39 +166,106 @@ export async function listCategoriesForPos(): Promise<CategoriesResult> {
     sort: 'name',
     limit: 500,
     depth: 0,
+    overrideAccess: true,
   })
-  return {
-    ok: true,
-    categories: docs.map((c) => ({
-      id: String(c.id),
-      name: c.name,
-      slug: c.slug,
-    })),
-  }
+
+  const ids = new Set(docs.map((d) => String(d.id)))
+
+  type Row = { id: string; name: string; pid: string | null }
+  const all: Row[] = docs.map((c) => ({
+    id: String(c.id),
+    name: c.name,
+    pid: categoryParentIdRaw(c as { parent?: unknown }, ids),
+  }))
+
+  const roots = all.filter((x) => !x.pid).sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+
+  const childrenOf = (rootId: string) =>
+    all.filter((x) => x.pid === rootId).sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+
+  const groups: PosCategoryGroup[] = roots.map((root) => {
+    const kids = childrenOf(root.id)
+    if (kids.length > 0) {
+      return {
+        id: root.id,
+        title: root.name,
+        chips: [
+          { id: root.id, label: 'Tümü' },
+          ...kids.map((k) => ({ id: k.id, label: k.name })),
+        ],
+      }
+    }
+    return {
+      id: root.id,
+      title: null,
+      chips: [{ id: root.id, label: root.name }],
+    }
+  })
+
+  return { ok: true, groups }
 }
 
 export type ProductsListResult =
   | { ok: true; products: PosProduct[] }
   | { ok: false; error: string }
 
-/** Kategoriye göre ürünler (tümü: categoryId = 'all' veya boş). */
+/** Kategoriye göre ürünler (tümü: categoryId = 'all' veya boş). Üst kategori = altlarındaki ürünler (online mağaza ile aynı). */
 export async function listProductsForPos(categoryId?: string | null): Promise<ProductsListResult> {
   const { payload, user } = await requireStaff()
   if (!payload || !user) {
     return { ok: false, error: 'Oturum gerekli.' }
   }
 
-  const where =
-    categoryId && categoryId !== 'all'
-      ? { category: { equals: Number(categoryId) } }
-      : undefined
+  if (!categoryId || categoryId === 'all') {
+    const { docs } = await payload.find({
+      collection: 'products',
+      where: {},
+      sort: 'name',
+      limit: 1000,
+      depth: 1,
+      overrideAccess: true,
+    })
+    return {
+      ok: true,
+      products: docs.map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        salePrice: Number(p.salePrice),
+        stock: Number(p.stock),
+        barcode: String(p.barcode),
+        imageUrl: mediaUrlFromRelation(p.image),
+      })),
+    }
+  }
+
+  const cat = await payload.findByID({
+    collection: 'categories',
+    id: categoryId,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  const { docs: childCats } = await payload.find({
+    collection: 'categories',
+    where: { parent: { equals: cat.id } },
+    limit: 200,
+    depth: 0,
+    sort: 'name',
+    overrideAccess: true,
+  })
+
+  const categoryFilter =
+    childCats.length > 0
+      ? { category: { in: childCats.map((c) => c.id) } }
+      : { category: { equals: cat.id } }
 
   const { docs } = await payload.find({
     collection: 'products',
-    where: where ?? {},
+    where: categoryFilter,
     sort: 'name',
     limit: 1000,
     depth: 1,
+    overrideAccess: true,
   })
 
   return {

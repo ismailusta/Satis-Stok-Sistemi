@@ -2,22 +2,38 @@
 
 import React, { createContext, useContext } from 'react'
 
-import type { StoreCategory } from './actions'
+import type { StoreCategory, StoreCategoryGroup } from './actions'
 
-const CategoriesContext = createContext<StoreCategory[]>([])
+const CategoriesContext = createContext<StoreCategoryGroup[]>([])
 
 export function MagazaCategoriesProvider({
-  categories,
+  categoryGroups,
   children,
 }: {
-  categories: StoreCategory[]
+  categoryGroups: StoreCategoryGroup[]
   children: React.ReactNode
 }) {
   return (
-    <CategoriesContext.Provider value={categories}>{children}</CategoriesContext.Provider>
+    <CategoriesContext.Provider value={categoryGroups}>{children}</CategoriesContext.Provider>
   )
 }
 
-export function useMagazaCategories(): StoreCategory[] {
+/** Yan menü ve ana sayfa: üst kategorinin altında gösterilecek linkler (alt yoksa tek satır). */
+export function categoryLinksForGroup(g: StoreCategoryGroup): StoreCategory[] {
+  if (g.children.length > 0) {
+    return g.children
+  }
+  return [
+    {
+      id: g.id,
+      name: g.name,
+      slug: g.slug,
+      imageUrl: g.imageUrl,
+      parentId: null,
+    },
+  ]
+}
+
+export function useMagazaCategoryGroups(): StoreCategoryGroup[] {
   return useContext(CategoriesContext)
 }

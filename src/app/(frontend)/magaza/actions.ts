@@ -69,10 +69,37 @@ export type StoreCategory = {
   name: string
   slug: string
   imageUrl: string | null
+  /** Üst kategori yoksa veya geçersiz üst referansı varsa null */
+  parentId: string | null
+}
+
+/** Üst kategori + alt kategoriler (ör. Temel Atıştırmalık → Cips, Kuruyemiş) */
+export type StoreCategoryGroup = {
+  id: string
+  name: string
+  slug: string
+  imageUrl: string | null
+  children: StoreCategory[]
+}
+
+function categoryParentIdFromDoc(
+  cat: { parent?: unknown },
+  validIds: Set<string>,
+): string | null {
+  const raw = cat.parent
+  if (raw == null || raw === false) return null
+  let pid: string | null = null
+  if (typeof raw === 'object' && raw && 'id' in raw) {
+    pid = String((raw as { id: unknown }).id)
+  } else if (typeof raw === 'string' || typeof raw === 'number') {
+    pid = String(raw)
+  }
+  if (!pid || !validIds.has(pid)) return null
+  return pid
 }
 
 export async function listStoreCategories(): Promise<
-  { ok: true; categories: StoreCategory[] } | { ok: false; error: string }
+  { ok: true; groups: StoreCategoryGroup[] } | { ok: false; error: string }
 > {
   try {
     const payloadConfig = await config
@@ -80,7 +107,7 @@ export async function listStoreCategories(): Promise<
     const { docs } = await payload.find({
       collection: 'categories',
       sort: 'name',
-      limit: 200,
+      limit: 500,
       depth: 1,
       overrideAccess: true,
     })
@@ -108,20 +135,40 @@ export async function listStoreCategories(): Promise<
       if (u) fallbackImageByCategoryId.set(cid, u)
     }
 
-    return {
-      ok: true,
-      categories: docs.map((c) => {
-        const id = String(c.id)
-        const fromCategory = mediaUrlFromRelation((c as { image?: unknown }).image)
-        const imageUrl = fromCategory ?? fallbackImageByCategoryId.get(id) ?? null
-        return {
-          id,
-          name: c.name,
-          slug: c.slug,
-          imageUrl,
-        }
-      }),
+    const ids = new Set(docs.map((d) => String(d.id)))
+
+    const toStoreCategory = (c: (typeof docs)[0]): StoreCategory => {
+      const id = String(c.id)
+      const fromCategory = mediaUrlFromRelation((c as { image?: unknown }).image)
+      const imageUrl = fromCategory ?? fallbackImageByCategoryId.get(id) ?? null
+      return {
+        id,
+        name: c.name,
+        slug: c.slug,
+        imageUrl,
+        parentId: categoryParentIdFromDoc(c as { parent?: unknown }, ids),
+      }
     }
+
+    const all = docs.map(toStoreCategory)
+    const roots = all.filter((c) => !c.parentId)
+
+    const groups: StoreCategoryGroup[] = roots.map((root) => {
+      const children = all
+        .filter((c) => c.parentId === root.id)
+        .sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+      return {
+        id: root.id,
+        name: root.name,
+        slug: root.slug,
+        imageUrl: root.imageUrl,
+        children,
+      }
+    })
+
+    groups.sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+
+    return { ok: true, groups }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Kategoriler yüklenemedi.'
     return { ok: false, error: message }
@@ -176,13 +223,24 @@ export async function getStorefrontHome(): Promise<
         const categories: StoreCategory[] = []
         for (const c of catsRaw) {
           if (!c || typeof c !== 'object') continue
-          const o = c as { id?: unknown; name?: string; slug?: string; image?: unknown }
+          const o = c as {
+            id?: unknown
+            name?: string
+            slug?: string
+            image?: unknown
+            parent?: unknown
+          }
           if (!o.slug) continue
+          let parentId: string | null = null
+          if (o.parent && typeof o.parent === 'object' && o.parent !== null && 'id' in o.parent) {
+            parentId = String((o.parent as { id: unknown }).id)
+          }
           categories.push({
             id: String(o.id),
             name: String(o.name ?? ''),
             slug: String(o.slug),
             imageUrl: mediaUrlFromRelation(o.image),
+            parentId,
           })
         }
         sections.push({
@@ -301,10 +359,24 @@ export async function listProductsByCategorySlug(
     const cat = cats[0]
     const catId = cat.id
 
+    const { docs: childCats } = await payload.find({
+      collection: 'categories',
+      where: { parent: { equals: catId } },
+      limit: 200,
+      depth: 0,
+      sort: 'name',
+      overrideAccess: true,
+    })
+
+    const categoryFilter =
+      childCats.length > 0
+        ? { category: { in: childCats.map((c) => c.id) } }
+        : { category: { equals: catId } }
+
     const { docs } = await payload.find({
       collection: 'products',
       where: {
-        and: [{ category: { equals: catId } }, { stock: { greater_than: 0 } }],
+        and: [categoryFilter, { stock: { greater_than: 0 } }],
       },
       limit: 500,
       depth: 1,

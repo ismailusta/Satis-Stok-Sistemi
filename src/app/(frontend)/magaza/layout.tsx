@@ -12,11 +12,11 @@ const fontSans = Plus_Jakarta_Sans({
 
 export default async function MagazaLayout({ children }: { children: React.ReactNode }) {
   const cats = await listStoreCategories()
-  const categories = cats.ok ? cats.categories : []
+  const categoryGroups = cats.ok ? cats.groups : []
 
   return (
     <div className={`${fontSans.variable} ${styles.magazaRoot}`}>
-      <MagazaShell categories={categories}>{children}</MagazaShell>
+      <MagazaShell categoryGroups={categoryGroups}>{children}</MagazaShell>
     </div>
   )
 }

@@ -19,11 +19,10 @@ export function MagazaNav() {
       <div className={styles.topNavInner}>
         <Link className={styles.brand} href="/magaza">
           <span className={styles.brandGlyph} aria-hidden>
-            g
+            W
           </span>
           <span className={styles.brandText}>
-            mağaza
-            <span className={styles.brandTag}>hızlı teslimat</span>
+            <span className={styles.brandName}>Westcoast Corner Shop</span>
           </span>
         </Link>
         <div className={styles.navRight}>
