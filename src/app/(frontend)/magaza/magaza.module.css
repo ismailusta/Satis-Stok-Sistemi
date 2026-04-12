@@ -248,6 +248,319 @@
   }
 }
 
+/* Hesap sayfaları: sol profil + menü (kategori sidebar yerine) */
+.accountNavMobile {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .sidebarAccountDesktop {
+    display: none !important;
+  }
+
+  .accountNavMobile {
+    display: block;
+    position: sticky;
+    top: 56px;
+    z-index: 19;
+    flex-shrink: 0;
+    background: var(--bg-page);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .accountNavMobileScroll {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding: 0.65rem 0.85rem 0.75rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .accountNavPill,
+  .accountNavPillActive {
+    flex-shrink: 0;
+    padding: 0.45rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    background: var(--bg-white);
+    transition:
+      background 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .accountNavPill:hover {
+    border-color: var(--purple);
+    color: var(--purple);
+  }
+
+  .accountNavPillActive {
+    background: linear-gradient(
+      90deg,
+      rgba(93, 62, 188, 0.14) 0%,
+      rgba(93, 62, 188, 0.06) 100%
+    );
+    border-color: rgba(93, 62, 188, 0.35);
+    color: var(--purple);
+  }
+}
+
+@media (min-width: 900px) {
+  .sidebar.sidebarAccount {
+    width: 280px;
+  }
+}
+
+.accountSidebarStack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.85rem 0.75rem 1.25rem;
+}
+
+.accountProfileCard {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.95rem 1rem 1rem;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+}
+
+.accountProfileCardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.accountProfileName {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.accountProfileEditBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: rgba(93, 62, 188, 0.1);
+  color: var(--purple);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.accountProfileEditBtn:hover {
+  background: rgba(93, 62, 188, 0.18);
+  transform: scale(1.05);
+}
+
+.accountProfileMuted {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.accountProfileGuest {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.accountLoginBtn {
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: none;
+  background: var(--purple);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.accountLoginBtn:hover {
+  filter: brightness(1.06);
+}
+
+.accountProfileLines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.accountProfileLine {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  min-width: 0;
+}
+
+.accountProfileIcon {
+  flex-shrink: 0;
+  opacity: 0.75;
+  font-size: 0.95rem;
+}
+
+.accountProfileLineText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountVerified {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: rgba(22, 163, 74, 0.15);
+  color: #15803d;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.accountProfileForm {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.accountProfileForm .field {
+  margin-bottom: 0.5rem;
+}
+
+.accountProfileFormActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.accountSaveBtn {
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: none;
+  background: var(--purple);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+.accountSaveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.accountCancelBtn {
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.84rem;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.accountProfileFlashOk {
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  background: rgba(22, 163, 74, 0.12);
+  color: #166534;
+}
+
+.accountProfileFlashErr {
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  background: rgba(220, 38, 38, 0.1);
+  color: #b42318;
+}
+
+.accountNavCard {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.75rem 0.5rem 0.85rem;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+}
+
+.accountNavCardTitle {
+  margin: 0 0 0.5rem 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.accountNavList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.accountNavLink,
+.accountNavLinkActive {
+  display: block;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--text);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.accountNavLink:hover {
+  background: #f3f0ff;
+  color: var(--purple);
+}
+
+.accountNavLinkActive {
+  background: linear-gradient(90deg, rgba(93, 62, 188, 0.12) 0%, rgba(93, 62, 188, 0.04) 100%);
+  color: var(--purple);
+  box-shadow: inset 3px 0 0 var(--purple);
+}
+
 /* Mobil: Getir tarzı yatay ana + alt kategori şeritleri (masaüstünde gizli) */
 .categoryNavMobile {
   display: none;
@@ -381,6 +694,118 @@
   opacity: 0.85;
 }
 
+/* Üst arama şeridi */
+.searchStripOuter {
+  flex-shrink: 0;
+}
+
+.searchStripSuspense {
+  min-height: 3.5rem;
+  background: var(--purple);
+}
+
+.searchStripPurple {
+  background: var(--purple);
+  padding: 0.65rem 1rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.searchStripRow {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.searchStripWhite {
+  flex: 1;
+  min-width: 0;
+  max-width: 720px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--bg-white);
+  border-radius: 14px;
+  padding: 0.35rem 0.65rem 0.35rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.searchStripSearchIcon {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--purple);
+  opacity: 0.9;
+}
+
+.searchStripInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text);
+  padding: 0.45rem 0.25rem;
+  outline: none;
+}
+
+.searchStripInput::placeholder {
+  color: #9ca3af;
+}
+
+.searchStripPopular {
+  background: var(--bg-white);
+  padding: 0.85rem 1rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.searchStripPopularTitle {
+  margin: 0 0 0.65rem;
+  text-align: center;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #374151;
+}
+
+.searchStripChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-start;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.searchStripChip {
+  padding: 0.4rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(93, 62, 188, 0.25);
+  background: rgba(93, 62, 188, 0.08);
+  color: var(--purple-dark);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease;
+}
+
+.searchStripChip:hover {
+  background: rgba(93, 62, 188, 0.16);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .searchStripWhite {
+    max-width: none;
+  }
+}
+
 /* Top nav */
 .topNav {
   position: sticky;
@@ -447,6 +872,149 @@
   gap: 0.5rem;
   flex-wrap: wrap;
   margin-left: auto;
+}
+
+.navProfileWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.navProfileTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  font: inherit;
+  transition: background 0.15s ease;
+}
+
+.navProfileTrigger:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.navProfileTriggerIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
+}
+
+.navProfileChevron {
+  font-size: 0.65rem;
+  opacity: 0.85;
+  margin-left: 0.1rem;
+}
+
+.navProfileDropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 280px;
+  max-width: min(320px, calc(100vw - 2rem));
+  background: var(--bg-white);
+  border-radius: 14px;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.18),
+    0 0 1px rgba(0, 0, 0, 0.08);
+  z-index: 50;
+  overflow: hidden;
+  text-align: left;
+}
+
+.navProfileHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, #f3f0ff 0%, #ede8ff 100%);
+  border-bottom: 1px solid var(--border);
+}
+
+.navProfileAvatar {
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 10px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  border: 1px solid var(--border);
+}
+
+.navProfileHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.navProfileName {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navProfilePhone {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.navProfileList {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0;
+}
+
+.navProfileLink {
+  display: block;
+  padding: 0.55rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+
+.navProfileLink:hover {
+  background: #f9fafb;
+}
+
+.navProfileFooter {
+  border-top: 1px solid var(--border);
+  padding: 0.35rem 0 0.5rem;
+}
+
+.navProfileLogout {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--purple);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.navProfileLogout:hover {
+  background: #faf8ff;
 }
 
 .langWrap {
@@ -777,6 +1345,44 @@ button.navPrimary {
   line-height: 1.45;
   color: var(--text-muted);
   text-align: center;
+}
+
+.authOtpHint {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+}
+
+.authBackLink {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--purple);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.authOtpPhoneMuted {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.authOtpInput {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .authLink {
@@ -1133,6 +1739,54 @@ button.navPrimary {
   cursor: not-allowed;
 }
 
+.cardFavFab {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition:
+    transform 0.15s ease,
+    color 0.15s ease;
+}
+
+.cardFavFab:hover {
+  transform: scale(1.06);
+  color: #c41e3a;
+}
+
+.cardFavFabActive {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #c41e3a;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+
+.cardFavFabActive:hover {
+  transform: scale(1.06);
+  background: #fff;
+}
+
 .cardTextLink {
   display: flex;
   flex-direction: column;
@@ -1463,7 +2117,8 @@ button.navPrimary {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   padding: 0.6rem 0.75rem;
   border-radius: 10px;
@@ -1474,7 +2129,8 @@ button.navPrimary {
 }
 
 .field input:focus,
-.field textarea:focus {
+.field textarea:focus,
+.field select:focus {
   outline: none;
   border-color: var(--purple);
   box-shadow: 0 0 0 3px rgba(93, 62, 188, 0.15);
@@ -2132,6 +2788,34 @@ button.navPrimary {
   font-size: 1rem;
 }
 
+.sepetDefaultHint {
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text);
+  background: rgba(93, 62, 188, 0.08);
+  border: 1px solid rgba(93, 62, 188, 0.2);
+}
+
+.sepetDefaultHintMuted {
+  margin: 0 0 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.sepetDefaultHintMuted a {
+  color: var(--purple);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sepetDefaultHintMuted a:hover {
+  text-decoration: underline;
+}
+
 .sepetSumRow {
   display: flex;
   justify-content: space-between;
@@ -2190,6 +2874,203 @@ button.navPrimary {
   text-decoration: underline;
 }
 
+.odemeSonuc {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 1rem 0 2rem;
+}
+
+.odemeSonucText {
+  margin: 0 0 0.75rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.odemeSonucMuted {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Hesabım alt sayfaları */
+.hesabimFormCard {
+  margin: 1.25rem 0 1.75rem;
+  padding: 1.1rem 1.15rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  max-width: 32rem;
+}
+
+.hesabimFormTitle {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hesabimTwoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+@media (max-width: 520px) {
+  .hesabimTwoCol {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hesabimCheck {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.85rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.hesabimCheck input {
+  width: auto;
+  accent-color: var(--purple);
+}
+
+.hesabimBtnRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.hesabimGhostBtn {
+  padding: 0.65rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.hesabimGhostBtn:hover {
+  border-color: var(--purple);
+  color: var(--purple);
+}
+
+.hesabimList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-width: 40rem;
+}
+
+.hesabimListItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+}
+
+.hesabimBadge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(93, 62, 188, 0.12);
+  color: var(--purple);
+  vertical-align: middle;
+}
+
+.hesabimAddrText {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.hesabimMeta {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.hesabimItemActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.hesabimLinkBtn,
+.hesabimDangerBtn {
+  padding: 0.35rem 0.5rem;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: right;
+}
+
+.hesabimLinkBtn {
+  color: var(--purple);
+}
+
+.hesabimLinkBtn:hover {
+  text-decoration: underline;
+}
+
+.hesabimDangerBtn {
+  color: #b42318;
+}
+
+.hesabimDangerBtn:hover {
+  text-decoration: underline;
+}
+
+.detailFavRow {
+  margin-top: 0.75rem;
+}
+
+.detailFavBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.95rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-white);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.detailFavBtn:hover {
+  border-color: var(--purple);
+  color: var(--purple);
+}
+
+.detailFavBtnActive {
+  border-color: #c41e3a;
+  color: #c41e3a;
+}
+
 .orderHistoryFull {
   list-style: none;
   margin: 0;
@@ -2201,13 +3082,42 @@ button.navPrimary {
 
 .orderHistoryCard {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
   padding: 1rem 1.1rem;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--bg-white);
+}
+
+.orderHistoryTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.orderLineMini {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.orderLineMini a {
+  color: var(--purple);
+  text-decoration: none;
+  font-size: 0.78rem;
+}
+
+.orderLineMini a:hover {
+  text-decoration: underline;
 }
 
 .orderHistoryDate {
@@ -2426,6 +3336,46 @@ button.navPrimary {
 
 .kayitSubmit:hover {
   filter: brightness(1.06);
+}
+
+.kayitOtpLead {
+  margin: 0 0 0.85rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text);
+  text-align: center;
+}
+
+.kayitSuccess {
+  padding: 0.5rem 0 0.25rem;
+  text-align: center;
+}
+
+.kayitSuccessIcon {
+  margin: 0 auto 0.5rem;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #e8e0ff 0%, #d4c8f0 100%);
+  color: var(--purple);
+  font-size: 1.65rem;
+  font-weight: 800;
+  line-height: 3rem;
+  text-align: center;
+}
+
+.kayitSuccessTitle {
+  margin: 0 0 0.35rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.kayitSuccessSub {
+  margin: 0 0 1.1rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .kayitModalFooter {

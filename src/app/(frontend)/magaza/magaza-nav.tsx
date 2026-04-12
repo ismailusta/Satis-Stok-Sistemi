@@ -7,11 +7,12 @@ import { usePathname } from 'next/navigation'
 
 import { useMagazaAuth } from './auth-context'
 import { useMagazaCart } from './cart-context'
+import { MagazaProfileMenu } from './magaza-profile-menu'
 import styles from './magaza.module.css'
 
 export function MagazaNav() {
   const pathname = usePathname()
-  const { isAuthenticated, openAuthModal, logout, phone } = useMagazaAuth()
+  const { isAuthenticated, openAuthModal } = useMagazaAuth()
   const { itemCount } = useMagazaCart()
 
   return (
@@ -25,6 +26,7 @@ export function MagazaNav() {
             <span className={styles.brandName}>Westcoast Corner Shop</span>
           </span>
         </Link>
+
         <div className={styles.navRight}>
           <label className={styles.langWrap}>
             <span className={styles.srOnly}>Dil</span>
@@ -46,12 +48,7 @@ export function MagazaNav() {
                   <span className={styles.navSepetBadge}>{itemCount}</span>
                 ) : null}
               </Link>
-              <span className={styles.navPhone} title={phone ?? undefined}>
-                {phone}
-              </span>
-              <button className={styles.navGhost} onClick={() => logout()} type="button">
-                Çıkış
-              </button>
+              <MagazaProfileMenu />
             </>
           ) : (
             <>

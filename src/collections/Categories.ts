@@ -14,7 +14,7 @@ export const Categories: CollectionConfig = {
   slug: 'categories',
   admin: {
     useAsTitle: 'name',
-    defaultColumns: ['name', 'parent', 'slug'],
+    defaultColumns: ['name', 'parent', 'slug', 'showInStorefront'],
   },
   hooks: {
     beforeChange: [
@@ -93,6 +93,16 @@ export const Categories: CollectionConfig = {
       label: 'Vitrin görseli',
       admin: {
         description: 'Ana sayfa kategori kutularında ve vitrinde kullanılır (isteğe bağlı).',
+      },
+    },
+    {
+      name: 'showInStorefront',
+      type: 'checkbox',
+      label: 'Online mağazada göster',
+      defaultValue: true,
+      admin: {
+        description:
+          'Kapalıysa bu kategori (ve vitrinde bağlantıları) online mağazada listelenmez. Altında görünür ürün kalmadıysa da boş kategori gösterilmez.',
       },
     },
   ],

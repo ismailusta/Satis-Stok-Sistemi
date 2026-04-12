@@ -10,7 +10,7 @@ import React, {
   useState,
 } from 'react'
 
-const AUTH_KEY = 'magaza-auth-v1'
+import { getMagazaSessionAction, logoutMagazaAction } from './auth-otp-actions'
 
 export type MagazaAuthState = {
   phone: string
@@ -37,55 +37,48 @@ export type MagazaAuthContextValue = {
   switchAuthModalMode: (mode: MagazaAuthModalMode) => void
   openAuthModal: (arg?: OpenAuthModalArg) => void
   closeAuthModal: () => void
-  finishLoginFromModal: (phone: string) => void
+  finishLoginFromModal: (phone: string, profile?: { name?: string; email?: string }) => void
   finishRegisterFromModal: (
     phone: string,
     profile: { name: string; email: string },
   ) => void
+  sessionReady: boolean
 }
 
 const MagazaAuthContext = createContext<MagazaAuthContextValue | null>(null)
 
-function loadStored(): MagazaAuthState | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = localStorage.getItem(AUTH_KEY)
-    if (!raw) return null
-    const p = JSON.parse(raw) as { phone?: string; name?: string; email?: string }
-    if (p?.phone && typeof p.phone === 'string' && p.phone.length > 5) {
-      return {
-        phone: p.phone,
-        ...(typeof p.name === 'string' ? { name: p.name } : {}),
-        ...(typeof p.email === 'string' ? { email: p.email } : {}),
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return null
-}
-
 export function MagazaAuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<MagazaAuthState | null>(null)
+  const [sessionReady, setSessionReady] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalMode, setAuthModalMode] = useState<MagazaAuthModalMode>('login')
   const onSuccessRef = useRef<(() => void) | undefined>(undefined)
 
   useEffect(() => {
-    setSession(loadStored())
-  }, [])
-
-  useEffect(() => {
-    try {
-      if (session) {
-        localStorage.setItem(AUTH_KEY, JSON.stringify(session))
-      } else {
-        localStorage.removeItem(AUTH_KEY)
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await getMagazaSessionAction()
+        if (cancelled) return
+        if (r.ok) {
+          setSession({
+            phone: r.user.phoneDisplay,
+            ...(r.user.name ? { name: r.user.name } : {}),
+            ...(r.user.email ? { email: r.user.email } : {}),
+          })
+        } else {
+          setSession(null)
+        }
+      } catch {
+        if (!cancelled) setSession(null)
+      } finally {
+        if (!cancelled) setSessionReady(true)
       }
-    } catch {
-      /* ignore */
+    })()
+    return () => {
+      cancelled = true
     }
-  }, [session])
+  }, [])
 
   const login = useCallback((phone: string, profile?: { name?: string; email?: string }) => {
     setSession({
@@ -97,11 +90,7 @@ export function MagazaAuthProvider({ children }: { children: React.ReactNode }) 
 
   const logout = useCallback(() => {
     setSession(null)
-    try {
-      localStorage.removeItem(AUTH_KEY)
-    } catch {
-      /* ignore */
-    }
+    void logoutMagazaAction()
   }, [])
 
   const openAuthModal = useCallback((arg?: OpenAuthModalArg) => {
@@ -129,8 +118,8 @@ export function MagazaAuthProvider({ children }: { children: React.ReactNode }) 
   }, [])
 
   const finishLoginFromModal = useCallback(
-    (phone: string) => {
-      login(phone, undefined)
+    (phone: string, profile?: { name?: string; email?: string }) => {
+      login(phone, profile)
       const cb = onSuccessRef.current
       onSuccessRef.current = undefined
       setShowAuthModal(false)
@@ -167,9 +156,11 @@ export function MagazaAuthProvider({ children }: { children: React.ReactNode }) 
       closeAuthModal,
       finishLoginFromModal,
       finishRegisterFromModal,
+      sessionReady,
     }),
     [
       session,
+      sessionReady,
       login,
       logout,
       showAuthModal,

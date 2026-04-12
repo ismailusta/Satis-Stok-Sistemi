@@ -6,9 +6,12 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 
 import { Categories } from './collections/Categories'
+import { CustomerAddresses } from './collections/CustomerAddresses'
+import { CustomerPaymentMethods } from './collections/CustomerPaymentMethods'
 import { Customers } from './collections/Customers'
 import { Media } from './collections/Media'
 import { Orders } from './collections/Orders'
+import { PhoneOtps } from './collections/PhoneOtps'
 import { Products } from './collections/Products'
 import { Users } from './collections/Users'
 import { StorefrontHome } from './globals/StorefrontHome'
@@ -23,7 +26,17 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Media, Categories, Products, Customers, Orders],
+  collections: [
+    Users,
+    Media,
+    Categories,
+    Products,
+    Customers,
+    CustomerAddresses,
+    CustomerPaymentMethods,
+    PhoneOtps,
+    Orders,
+  ],
   globals: [StorefrontHome],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',

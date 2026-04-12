@@ -3,6 +3,8 @@
 import { headers as getHeaders } from 'next/headers.js'
 import { getPayload } from 'payload'
 
+import { isPosVisible, posVisibilityWhere, whereAnd } from '@/lib/product-visibility'
+
 import config from '@/payload.config'
 
 function mediaUrlFromRelation(image: unknown): string | null {
@@ -59,6 +61,9 @@ export async function lookupProductByBarcode(barcode: string): Promise<LookupRes
   }
 
   const p = docs[0]
+  if (!isPosVisible(p as { showInPos?: unknown })) {
+    return { ok: false, error: 'Bu ürün kasada satışa kapalı.' }
+  }
   return {
     ok: true,
     product: {
@@ -219,7 +224,7 @@ export async function listProductsForPos(categoryId?: string | null): Promise<Pr
   if (!categoryId || categoryId === 'all') {
     const { docs } = await payload.find({
       collection: 'products',
-      where: {},
+      where: posVisibilityWhere(),
       sort: 'name',
       limit: 1000,
       depth: 1,
@@ -261,7 +266,7 @@ export async function listProductsForPos(categoryId?: string | null): Promise<Pr
 
   const { docs } = await payload.find({
     collection: 'products',
-    where: categoryFilter,
+    where: whereAnd(categoryFilter, posVisibilityWhere()),
     sort: 'name',
     limit: 1000,
     depth: 1,
@@ -533,6 +538,13 @@ export async function submitPosSale(
       id: productId,
       depth: 0,
     })
+
+    if (!isPosVisible(p as { showInPos?: unknown })) {
+      return {
+        ok: false,
+        error: `Bu ürün kasada satılamaz: ${p.name}`,
+      }
+    }
 
     const unitPrice = Number(p.salePrice)
     const lineTotal = Math.round(quantity * unitPrice * 100) / 100

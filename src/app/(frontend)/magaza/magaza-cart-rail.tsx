@@ -1,11 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 
 import { useMagazaAuth } from './auth-context'
 import { useMagazaCart } from './cart-context'
-import { getOrderHistory, type MagazaOrderSummary } from './order-history'
+import { listMyOrders, type MyOrderRow } from './hesabim-actions'
 import styles from './magaza.module.css'
 
 function formatDate(iso: string) {
@@ -23,17 +23,32 @@ function formatDate(iso: string) {
   }
 }
 
+function itemCount(o: MyOrderRow): number {
+  return o.items.reduce((s, i) => s + i.quantity, 0)
+}
+
 export function MagazaCartRail() {
-  const { isAuthenticated } = useMagazaAuth()
-  const { lines, setQty, removeLine, total, itemCount } = useMagazaCart()
-  const [orders, setOrders] = useState<MagazaOrderSummary[]>([])
+  const { isAuthenticated, sessionReady } = useMagazaAuth()
+  const { lines, setQty, removeLine, total, itemCount: cartItems } = useMagazaCart()
+  const [orders, setOrders] = useState<MyOrderRow[]>([])
+
+  const loadOrders = useCallback(async () => {
+    if (!isAuthenticated) {
+      setOrders([])
+      return
+    }
+    const res = await listMyOrders()
+    if (res.ok) {
+      setOrders(res.orders)
+    } else {
+      setOrders([])
+    }
+  }, [isAuthenticated])
 
   useEffect(() => {
-    setOrders(getOrderHistory())
-    const onUpd = () => setOrders(getOrderHistory())
-    window.addEventListener('magaza-orders-updated', onUpd)
-    return () => window.removeEventListener('magaza-orders-updated', onUpd)
-  }, [])
+    if (!sessionReady) return
+    void loadOrders()
+  }, [sessionReady, loadOrders])
 
   const preview = orders.slice(0, 4)
 
@@ -117,7 +132,7 @@ export function MagazaCartRail() {
             ) : (
               <ul className={styles.pastOrdersList}>
                 {preview.map((o) => (
-                  <li className={styles.pastOrdersItem} key={String(o.orderId)}>
+                  <li className={styles.pastOrdersItem} key={String(o.id)}>
                     <span className={styles.pastOrdersIcon} aria-hidden>
                       🏠
                     </span>
@@ -125,7 +140,9 @@ export function MagazaCartRail() {
                       <span className={styles.pastOrdersDate}>{formatDate(o.createdAt)}</span>
                       <span className={styles.pastOrdersNo}>#{o.orderNumber}</span>
                     </div>
-                    <span className={styles.pastOrdersTotal}>{o.total.toFixed(2)} ₺</span>
+                    <span className={styles.pastOrdersTotal}>
+                      {o.totalAmount.toFixed(2)} ₺ · {itemCount(o)} ürün
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -139,7 +156,7 @@ export function MagazaCartRail() {
 
       <Link className={styles.mobileCartFab} href="/magaza/sepet">
         Sepet
-        {itemCount > 0 ? <span className={styles.mobileCartFabBadge}>{itemCount}</span> : null}
+        {cartItems > 0 ? <span className={styles.mobileCartFabBadge}>{cartItems}</span> : null}
       </Link>
     </>
   )

@@ -5,7 +5,15 @@ export const Products: CollectionConfig = {
   slug: 'products',
   admin: {
     useAsTitle: 'name',
-    defaultColumns: ['name', 'barcode', 'category', 'salePrice', 'stock'],
+    defaultColumns: [
+      'name',
+      'barcode',
+      'category',
+      'showInStorefront',
+      'showInPos',
+      'salePrice',
+      'stock',
+    ],
     listSearchableFields: ['name', 'barcode'],
   },
   fields: [
@@ -75,6 +83,25 @@ export const Products: CollectionConfig = {
       defaultValue: 0,
       min: 0,
       label: 'Mevcut stok',
+    },
+    {
+      name: 'showInStorefront',
+      type: 'checkbox',
+      label: 'Online mağazada göster',
+      defaultValue: true,
+      admin: {
+        description:
+          'Kapalıysa ürün internet mağazasında listelenmez (ör. alkollü içecekler). Kasada satış ayrıca “POS’ta sat” ile yönetilir.',
+      },
+    },
+    {
+      name: 'showInPos',
+      type: 'checkbox',
+      label: 'POS / kasada sat',
+      defaultValue: true,
+      admin: {
+        description: 'Kapalıysa barkod ile kasada bu ürün satılamaz.',
+      },
     },
   ],
 }

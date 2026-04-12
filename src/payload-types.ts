@@ -72,6 +72,9 @@ export interface Config {
     categories: Category;
     products: Product;
     customers: Customer;
+    'customer-addresses': CustomerAddress;
+    'customer-payment-methods': CustomerPaymentMethod;
+    'phone-otps': PhoneOtp;
     orders: Order;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -85,6 +88,9 @@ export interface Config {
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
     products: ProductsSelect<false> | ProductsSelect<true>;
     customers: CustomersSelect<false> | CustomersSelect<true>;
+    'customer-addresses': CustomerAddressesSelect<false> | CustomerAddressesSelect<true>;
+    'customer-payment-methods': CustomerPaymentMethodsSelect<false> | CustomerPaymentMethodsSelect<true>;
+    'phone-otps': PhoneOtpsSelect<false> | PhoneOtpsSelect<true>;
     orders: OrdersSelect<false> | OrdersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -192,6 +198,10 @@ export interface Category {
    * Ana sayfa kategori kutularında ve vitrinde kullanılır (isteğe bağlı).
    */
   image?: (number | null) | Media;
+  /**
+   * Kapalıysa bu kategori (ve vitrinde bağlantıları) online mağazada listelenmez. Altında görünür ürün kalmadıysa da boş kategori gösterilmez.
+   */
+  showInStorefront?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -227,6 +237,14 @@ export interface Product {
   salePrice: number;
   vatRate: number;
   stock: number;
+  /**
+   * Kapalıysa ürün internet mağazasında listelenmez (ör. alkollü içecekler). Kasada satış ayrıca “POS’ta sat” ile yönetilir.
+   */
+  showInStorefront?: boolean | null;
+  /**
+   * Kapalıysa barkod ile kasada bu ürün satılamaz.
+   */
+  showInPos?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -237,9 +255,72 @@ export interface Product {
 export interface Customer {
   id: number;
   name: string;
+  /**
+   * Normalize edilmiş numara; giriş eşleştirmesi için.
+   */
+  phoneKey?: string | null;
   phone?: string | null;
   email?: string | null;
+  /**
+   * Çoklu adres için “Müşteri adresleri” kullanın.
+   */
   address?: string | null;
+  /**
+   * Online mağaza favorileri.
+   */
+  favoriteProducts?: (number | Product)[] | null;
+  marketingEmail?: boolean | null;
+  marketingSms?: boolean | null;
+  orderStatusSms?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customer-addresses".
+ */
+export interface CustomerAddress {
+  id: number;
+  customer: number | Customer;
+  title: string;
+  fullAddress: string;
+  city?: string | null;
+  district?: string | null;
+  isDefault?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customer-payment-methods".
+ */
+export interface CustomerPaymentMethod {
+  id: number;
+  customer: number | Customer;
+  label: string;
+  type: 'card' | 'other';
+  /**
+   * Sadece gösterim; tam kart numarası saklanmaz.
+   */
+  last4?: string | null;
+  cardBrand?: ('visa' | 'mastercard' | 'troy' | 'other') | null;
+  isDefault?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Geçici doğrulama kodları. Üretimde düzenlemeyin.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "phone-otps".
+ */
+export interface PhoneOtp {
+  id: number;
+  phoneKey: string;
+  codeHash: string;
+  expiresAt: string;
+  lastSentAt?: string | null;
+  verifyAttempts?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -343,6 +424,18 @@ export interface PayloadLockedDocument {
         value: number | Customer;
       } | null)
     | ({
+        relationTo: 'customer-addresses';
+        value: number | CustomerAddress;
+      } | null)
+    | ({
+        relationTo: 'customer-payment-methods';
+        value: number | CustomerPaymentMethod;
+      } | null)
+    | ({
+        relationTo: 'phone-otps';
+        value: number | PhoneOtp;
+      } | null)
+    | ({
         relationTo: 'orders';
         value: number | Order;
       } | null);
@@ -437,6 +530,7 @@ export interface CategoriesSelect<T extends boolean = true> {
   name?: T;
   slug?: T;
   image?: T;
+  showInStorefront?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -454,6 +548,8 @@ export interface ProductsSelect<T extends boolean = true> {
   salePrice?: T;
   vatRate?: T;
   stock?: T;
+  showInStorefront?: T;
+  showInPos?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -463,9 +559,55 @@ export interface ProductsSelect<T extends boolean = true> {
  */
 export interface CustomersSelect<T extends boolean = true> {
   name?: T;
+  phoneKey?: T;
   phone?: T;
   email?: T;
   address?: T;
+  favoriteProducts?: T;
+  marketingEmail?: T;
+  marketingSms?: T;
+  orderStatusSms?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customer-addresses_select".
+ */
+export interface CustomerAddressesSelect<T extends boolean = true> {
+  customer?: T;
+  title?: T;
+  fullAddress?: T;
+  city?: T;
+  district?: T;
+  isDefault?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customer-payment-methods_select".
+ */
+export interface CustomerPaymentMethodsSelect<T extends boolean = true> {
+  customer?: T;
+  label?: T;
+  type?: T;
+  last4?: T;
+  cardBrand?: T;
+  isDefault?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "phone-otps_select".
+ */
+export interface PhoneOtpsSelect<T extends boolean = true> {
+  phoneKey?: T;
+  codeHash?: T;
+  expiresAt?: T;
+  lastSentAt?: T;
+  verifyAttempts?: T;
   updatedAt?: T;
   createdAt?: T;
 }

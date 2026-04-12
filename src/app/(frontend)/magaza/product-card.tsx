@@ -10,9 +10,18 @@ import styles from './magaza.module.css'
 export function ProductCard({
   product,
   compact = false,
+  isFavorite = false,
+  showFavorite = false,
+  favoriteBusy = false,
+  onFavoriteClick,
 }: {
   product: StoreProduct
   compact?: boolean
+  /** Girişli kullanıcı + favori id listesi yüklendiyse */
+  isFavorite?: boolean
+  showFavorite?: boolean
+  favoriteBusy?: boolean
+  onFavoriteClick?: () => void
 }) {
   const { addProduct } = useMagazaCart()
   const href = `/magaza/urun/${product.id}`
@@ -28,6 +37,20 @@ export function ProductCard({
             <div className={styles.thumbPh}>{product.name.slice(0, 1).toUpperCase()}</div>
           )}
         </Link>
+        {showFavorite && onFavoriteClick ? (
+          <button
+            aria-label={isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+            className={isFavorite ? styles.cardFavFabActive : styles.cardFavFab}
+            disabled={favoriteBusy}
+            onClick={(e) => {
+              e.preventDefault()
+              onFavoriteClick()
+            }}
+            type="button"
+          >
+            {isFavorite ? '♥' : '♡'}
+          </button>
+        ) : null}
         <button
           aria-label="Sepete ekle"
           className={styles.cardAddFab}

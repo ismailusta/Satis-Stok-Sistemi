@@ -42,8 +42,13 @@ export function MagazaAuthModal() {
             </button>
             <MagazaPhoneAuthForm
               heading="Giriş yap"
+              onOtpSuccess={(u) =>
+                finishLoginFromModal(u.phoneDisplay, {
+                  name: u.name ?? undefined,
+                  email: u.email ?? undefined,
+                })
+              }
               onRequestRegister={() => switchAuthModalMode('register')}
-              onVerifiedPhone={finishLoginFromModal}
               showFooter
               variant="modal"
             />

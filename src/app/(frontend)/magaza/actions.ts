@@ -1,8 +1,22 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { getPayload } from 'payload'
 
 import config from '@/payload.config'
+import {
+  checkoutFormInitializeCreate,
+  Iyzico,
+  iyzicoCallbackAbsoluteUrlForOrder,
+} from '@/lib/iyzico'
+
+import {
+  isStorefrontVisible,
+  storefrontVisibilityWhere,
+  whereAnd,
+} from '@/lib/product-visibility'
+
+import { requireMagazaCustomerId } from './auth-otp-actions'
 
 import type { CartLineInput } from '../pos/actions'
 
@@ -31,7 +45,10 @@ export async function listStoreProducts(): Promise<ListStoreProductsResult> {
 
     const { docs } = await payload.find({
       collection: 'products',
-      where: { stock: { greater_than: 0 } },
+      where: whereAnd(
+        { stock: { greater_than: 0 } },
+        storefrontVisibilityWhere(),
+      ),
       limit: 500,
       depth: 1,
       sort: 'name',
@@ -106,6 +123,7 @@ export async function listStoreCategories(): Promise<
     const payload = await getPayload({ config: payloadConfig })
     const { docs } = await payload.find({
       collection: 'categories',
+      where: storefrontVisibilityWhere(),
       sort: 'name',
       limit: 500,
       depth: 1,
@@ -114,12 +132,27 @@ export async function listStoreCategories(): Promise<
 
     const { docs: products } = await payload.find({
       collection: 'products',
-      where: { stock: { greater_than: 0 } },
+      where: whereAnd(
+        { stock: { greater_than: 0 } },
+        storefrontVisibilityWhere(),
+      ),
       limit: 500,
       depth: 1,
       sort: 'name',
       overrideAccess: true,
     })
+
+    const productCategoryIds = new Set<string>()
+    for (const p of products) {
+      const raw = (p as { category?: unknown }).category
+      let cid: string | null = null
+      if (raw && typeof raw === 'object' && 'id' in raw) {
+        cid = String((raw as { id: unknown }).id)
+      } else if (raw != null && (typeof raw === 'string' || typeof raw === 'number')) {
+        cid = String(raw)
+      }
+      if (cid) productCategoryIds.add(cid)
+    }
 
     const fallbackImageByCategoryId = new Map<string, string>()
     for (const p of products) {
@@ -151,10 +184,21 @@ export async function listStoreCategories(): Promise<
     }
 
     const all = docs.map(toStoreCategory)
-    const roots = all.filter((c) => !c.parentId)
+
+    function subtreeHasProducts(catId: string): boolean {
+      if (productCategoryIds.has(catId)) return true
+      for (const c of all) {
+        if (c.parentId === catId && subtreeHasProducts(c.id)) return true
+      }
+      return false
+    }
+
+    const visible = all.filter((c) => subtreeHasProducts(c.id))
+
+    const roots = visible.filter((c) => !c.parentId)
 
     const groups: StoreCategoryGroup[] = roots.map((root) => {
-      const children = all
+      const children = visible
         .filter((c) => c.parentId === root.id)
         .sort((a, b) => a.name.localeCompare(b.name, 'tr'))
       return {
@@ -229,8 +273,10 @@ export async function getStorefrontHome(): Promise<
             slug?: string
             image?: unknown
             parent?: unknown
+            showInStorefront?: unknown
           }
           if (!o.slug) continue
+          if (!isStorefrontVisible(o)) continue
           let parentId: string | null = null
           if (o.parent && typeof o.parent === 'object' && o.parent !== null && 'id' in o.parent) {
             parentId = String((o.parent as { id: unknown }).id)
@@ -259,7 +305,9 @@ export async function getStorefrontHome(): Promise<
             salePrice: unknown
             stock: unknown
             image?: unknown
+            showInStorefront?: unknown
           }
+          if (!isStorefrontVisible(o)) continue
           products.push(mapProductDoc(o))
         }
         sections.push({
@@ -311,10 +359,19 @@ export async function getProductDetail(
       overrideAccess: true,
     })
 
+    if (!isStorefrontVisible(p as { showInStorefront?: unknown })) {
+      return { ok: false, error: 'Ürün bulunamadı.' }
+    }
+
     let categoryName: string | null = null
     const cat = p.category
-    if (cat && typeof cat === 'object' && 'name' in cat) {
-      categoryName = String((cat as { name: string }).name)
+    if (cat && typeof cat === 'object') {
+      if (!isStorefrontVisible(cat as { showInStorefront?: unknown })) {
+        return { ok: false, error: 'Ürün bulunamadı.' }
+      }
+      if ('name' in cat) {
+        categoryName = String((cat as { name: string }).name)
+      }
     }
 
     return {
@@ -347,7 +404,9 @@ export async function listProductsByCategorySlug(
 
     const { docs: cats } = await payload.find({
       collection: 'categories',
-      where: { slug: { equals: trimmed } },
+      where: {
+        and: [{ slug: { equals: trimmed } }, storefrontVisibilityWhere()],
+      },
       limit: 1,
       overrideAccess: true,
     })
@@ -361,7 +420,9 @@ export async function listProductsByCategorySlug(
 
     const { docs: childCats } = await payload.find({
       collection: 'categories',
-      where: { parent: { equals: catId } },
+      where: {
+        and: [{ parent: { equals: catId } }, storefrontVisibilityWhere()],
+      },
       limit: 200,
       depth: 0,
       sort: 'name',
@@ -376,7 +437,11 @@ export async function listProductsByCategorySlug(
     const { docs } = await payload.find({
       collection: 'products',
       where: {
-        and: [categoryFilter, { stock: { greater_than: 0 } }],
+        and: [
+          categoryFilter,
+          { stock: { greater_than: 0 } },
+          storefrontVisibilityWhere(),
+        ],
       },
       limit: 500,
       depth: 1,
@@ -395,6 +460,47 @@ export async function listProductsByCategorySlug(
   }
 }
 
+/** Mağaza üst araması: ad veya barkodda geçen, stokta ürünler */
+export async function searchStoreProducts(raw: string): Promise<ListStoreProductsResult> {
+  const term = raw.trim()
+  if (term.length < 1) {
+    return { ok: true, products: [] }
+  }
+
+  try {
+    const payloadConfig = await config
+    const payload = await getPayload({ config: payloadConfig })
+
+    const { docs } = await payload.find({
+      collection: 'products',
+      where: {
+        and: [
+          { stock: { greater_than: 0 } },
+          storefrontVisibilityWhere(),
+          {
+            or: [
+              { name: { contains: term } },
+              { barcode: { contains: term } },
+            ],
+          },
+        ],
+      },
+      limit: 120,
+      depth: 1,
+      sort: 'name',
+      overrideAccess: true,
+    })
+
+    return {
+      ok: true,
+      products: docs.map((p) => mapProductDoc(p)),
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Arama yapılamadı.'
+    return { ok: false, error: message }
+  }
+}
+
 export type OnlineCheckoutInput = {
   lines: CartLineInput[]
   customerName: string
@@ -402,14 +508,75 @@ export type OnlineCheckoutInput = {
   address: string
 }
 
-export type SubmitOnlineOrderResult =
-  | { ok: true; orderNumber: string; orderId: string | number }
+export type StartOnlinePaymentResult =
+  | { ok: true; paymentPageUrl: string }
   | { ok: false; error: string }
 
 const MAX_LINES = 30
 const MAX_QTY_PER_LINE = 99
 
-export async function submitOnlineOrder(input: OnlineCheckoutInput): Promise<SubmitOnlineOrderResult> {
+async function buyerClientIp(): Promise<string> {
+  const h = await headers()
+  const xff = h.get('x-forwarded-for')
+  if (xff) {
+    const first = xff.split(',')[0]?.trim()
+    if (first) return first
+  }
+  return h.get('x-real-ip') ?? '127.0.0.1'
+}
+
+function splitBuyerName(full: string): { name: string; surname: string } {
+  const t = full.trim()
+  const parts = t.split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return { name: 'Müşteri', surname: 'Müşteri' }
+  if (parts.length === 1) return { name: parts[0], surname: 'Müşteri' }
+  return { name: parts[0], surname: parts.slice(1).join(' ') }
+}
+
+function formatGsmForIyzico(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length >= 10 && digits.startsWith('90')) return `+${digits}`
+  if (digits.length === 11 && digits.startsWith('0')) return `+90${digits.slice(1)}`
+  if (digits.length === 10 && digits.startsWith('5')) return `+90${digits}`
+  if (digits.length > 0) return `+90${digits}`
+  return '+905000000000'
+}
+
+/** İyzico sandbox test alıcıları için; canlıda gerçek müşteri bilgisi kullanılmalıdır. */
+function buyerIdentityNumber(): string {
+  return process.env.IYZIPAY_BUYER_IDENTITY_NUMBER?.trim() || '11111111111'
+}
+
+function isValidEmailForIyzico(raw: string | null | undefined): raw is string {
+  if (!raw) return false
+  const s = raw.trim()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return false
+  const domain = s.split('@')[1]?.toLowerCase() ?? ''
+  if (domain.endsWith('.local')) return false
+  return true
+}
+
+/**
+ * İyzico geçerli alan adı ister (.local vb. reddedilir).
+ * Önce IYZIPAY_BUYER_EMAIL, sonra müşteri kaydındaki e-posta; yoksa test.com yedeği.
+ */
+function buyerEmailForIyzico(orderIdStr: string, customerEmail: string | null | undefined): string {
+  const fromEnv = process.env.IYZIPAY_BUYER_EMAIL?.trim()
+  if (isValidEmailForIyzico(fromEnv)) return fromEnv
+
+  if (isValidEmailForIyzico(customerEmail)) {
+    return customerEmail.trim()
+  }
+
+  const local = `siparis.${orderIdStr.replace(/[^a-zA-Z0-9]/g, '').slice(0, 48) || '0'}`
+  return `${local}@test.com`
+}
+
+/**
+ * Online sipariş: önce taslak kayıt, İyzico ödeme formu HTML'i döner.
+ * Ödeme başarılı olunca callback siparişi tamamlar ve stok düşer.
+ */
+export async function startOnlinePayment(input: OnlineCheckoutInput): Promise<StartOnlinePaymentResult> {
   const name = input.customerName.trim()
   const phone = input.phone.trim()
   const address = input.address.trim()
@@ -459,6 +626,8 @@ export async function submitOnlineOrder(input: OnlineCheckoutInput): Promise<Sub
       quantityRefunded: number
     }> = []
 
+    const basketLines: Array<{ id: string; name: string; linePrice: string }> = []
+
     for (const [productId, quantity] of merged) {
       const p = await payload.findByID({
         collection: 'products',
@@ -474,6 +643,13 @@ export async function submitOnlineOrder(input: OnlineCheckoutInput): Promise<Sub
         }
       }
 
+      if (!isStorefrontVisible(p as { showInStorefront?: unknown })) {
+        return {
+          ok: false,
+          error: `Bu ürün online satılamaz: ${p.name}.`,
+        }
+      }
+
       const unitPrice = Number(p.salePrice)
       const lineTotal = Math.round(quantity * unitPrice * 100) / 100
 
@@ -483,6 +659,12 @@ export async function submitOnlineOrder(input: OnlineCheckoutInput): Promise<Sub
         unitPrice,
         lineTotal,
         quantityRefunded: 0,
+      })
+
+      basketLines.push({
+        id: String(p.id),
+        name: String(p.name).slice(0, 240),
+        linePrice: lineTotal.toFixed(2),
       })
     }
 
@@ -494,25 +676,127 @@ export async function submitOnlineOrder(input: OnlineCheckoutInput): Promise<Sub
       `Tel: ${phone}\n` +
       `Adres: ${address}`
 
+    const session = await requireMagazaCustomerId()
+
+    let customerEmail: string | null = null
+    if (session.ok) {
+      const cust = await payload.findByID({
+        collection: 'customers',
+        id: session.customerId,
+        depth: 0,
+        overrideAccess: true,
+      })
+      const em = (cust as { email?: string }).email
+      customerEmail = typeof em === 'string' ? em : null
+    }
+
     const order = await payload.create({
       collection: 'orders',
       data: {
         source: 'online',
-        status: 'completed',
+        status: 'draft',
         items,
         totalAmount,
         paymentMethod: 'card',
         cashReceived: null,
         changeGiven: null,
         notes,
+        ...(session.ok ? { customer: Number(session.customerId) } : {}),
       },
       overrideAccess: true,
     })
 
+    const orderIdStr = String(order.id)
+    const priceStr = totalAmount.toFixed(2)
+    const ip = await buyerClientIp()
+    const { name: buyerName, surname: buyerSurname } = splitBuyerName(name)
+    const gsm = formatGsmForIyzico(phone)
+    const emailForIyzico = buyerEmailForIyzico(orderIdStr, customerEmail)
+
+    const addressBlock = address.replace(/\s+/g, ' ').trim()
+    const cityLine = addressBlock.split(',').pop()?.trim() || 'Turkey'
+
+    const basketItems = basketLines.map((bl) => ({
+      id: bl.id,
+      name: bl.name,
+      category1: 'Genel',
+      category2: 'Mağaza',
+      itemType: Iyzico.BASKET_ITEM_TYPE.PHYSICAL,
+      price: bl.linePrice,
+    }))
+
+    const initRequest = {
+      locale: Iyzico.LOCALE.TR,
+      conversationId: orderIdStr,
+      price: priceStr,
+      paidPrice: priceStr,
+      currency: Iyzico.CURRENCY.TRY,
+      basketId: String(order.orderNumber ?? orderIdStr),
+      paymentGroup: Iyzico.PAYMENT_GROUP.PRODUCT,
+      callbackUrl: iyzicoCallbackAbsoluteUrlForOrder(orderIdStr),
+      buyer: {
+        id: orderIdStr,
+        name: buyerName,
+        surname: buyerSurname,
+        gsmNumber: gsm,
+        email: emailForIyzico,
+        identityNumber: buyerIdentityNumber(),
+        registrationDate: '2016-01-01 12:00:00',
+        lastLoginDate: '2016-01-01 12:00:00',
+        registrationAddress: addressBlock.slice(0, 240),
+        ip,
+        city: cityLine.slice(0, 40),
+        country: 'Turkey',
+        zipCode: '34000',
+      },
+      shippingAddress: {
+        contactName: `${buyerName} ${buyerSurname}`.slice(0, 120),
+        city: cityLine.slice(0, 40),
+        country: 'Turkey',
+        address: addressBlock.slice(0, 240),
+        zipCode: '34000',
+      },
+      billingAddress: {
+        contactName: `${buyerName} ${buyerSurname}`.slice(0, 120),
+        city: cityLine.slice(0, 40),
+        country: 'Turkey',
+        address: addressBlock.slice(0, 240),
+        zipCode: '34000',
+      },
+      basketItems,
+    }
+
+    const initResult = await checkoutFormInitializeCreate(initRequest)
+
+    if (initResult.status !== 'success') {
+      await payload.update({
+        collection: 'orders',
+        id: order.id,
+        data: { status: 'cancelled' },
+        overrideAccess: true,
+      })
+      const detail =
+        initResult.errorMessage ||
+        initResult.errorCode ||
+        'Ödeme formu oluşturulamadı.'
+      return { ok: false, error: detail }
+    }
+
+    const pageUrl = initResult.paymentPageUrl
+    if (typeof pageUrl === 'string' && pageUrl.startsWith('http')) {
+      return { ok: true, paymentPageUrl: pageUrl }
+    }
+
+    await payload.update({
+      collection: 'orders',
+      id: order.id,
+      data: { status: 'cancelled' },
+      overrideAccess: true,
+    })
     return {
-      ok: true,
-      orderId: order.id,
-      orderNumber: String(order.orderNumber),
+      ok: false,
+      error:
+        'İyzico ödeme sayfası adresi alınamadı (paymentPageUrl). Ortam anahtarlarını ve API yanıtını kontrol edin.',
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Sipariş oluşturulamadı.'

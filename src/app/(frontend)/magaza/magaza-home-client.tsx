@@ -60,8 +60,13 @@ export function MagazaHomeClient({ storefront, loadError }: Props) {
             ) : (
               <div className={styles.landingAuthCard}>
                 <MagazaPhoneAuthForm
+                  onOtpSuccess={(u) =>
+                    login(u.phoneDisplay, {
+                      name: u.name ?? undefined,
+                      email: u.email ?? undefined,
+                    })
+                  }
                   onRequestRegister={() => openAuthModal({ mode: 'register' })}
-                  onVerifiedPhone={(p) => login(p)}
                   showFooter
                   variant="card"
                 />

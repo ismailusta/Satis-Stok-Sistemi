@@ -12,6 +12,8 @@ const lanDevOrigins = process.env.LAN_DEV_ORIGIN
   : []
 
 const nextConfig: NextConfig = {
+  // iyzipay dinamik require(fs.readdirSync) kullanır; paketi dışarıda tut.
+  serverExternalPackages: ['iyzipay'],
   allowedDevOrigins: [
     'http://localhost:3000',
     'http://127.0.0.1:3000',

@@ -390,6 +390,14 @@ export const Orders: CollectionConfig = {
           return
         }
 
+        if (
+          operation === 'update' &&
+          previousDoc?.status === 'draft' &&
+          doc.status === 'completed'
+        ) {
+          await applyStockDelta(req.payload, doc.items as OrderLine[], -1, req)
+        }
+
         if (operation !== 'update' || !previousDoc) {
           return
         }
