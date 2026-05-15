@@ -1,8 +1,11 @@
 'use server'
 
+import { randomUUID } from 'node:crypto'
+
 import { headers as getHeaders } from 'next/headers.js'
 import { getPayload } from 'payload'
 
+import { applyProductStockChange } from '@/lib/stock-movements'
 import { isPosVisible, posVisibilityWhere, whereAnd } from '@/lib/product-visibility'
 
 import config from '@/payload.config'
@@ -11,6 +14,12 @@ function mediaUrlFromRelation(image: unknown): string | null {
   if (!image || typeof image !== 'object') return null
   const u = (image as { url?: string }).url
   return typeof u === 'string' && u.length > 0 ? u : null
+}
+
+function lowStockThresholdFromDoc(p: { lowStockThreshold?: unknown }): number {
+  const n = Number(p.lowStockThreshold ?? 5)
+  if (!Number.isFinite(n) || n < 0) return 5
+  return Math.floor(n)
 }
 
 export type LookupResult =
@@ -22,6 +31,8 @@ export type PosProduct = {
   name: string
   salePrice: number
   stock: number
+  /** POS kritik stok uyarı eşiği; 0 = uyarı kapalı */
+  lowStockThreshold: number
   barcode: string
   /** Payload media URL (relative veya mutlak) */
   imageUrl: string | null
@@ -71,9 +82,115 @@ export async function lookupProductByBarcode(barcode: string): Promise<LookupRes
       name: p.name,
       salePrice: Number(p.salePrice),
       stock: Number(p.stock),
+      lowStockThreshold: lowStockThresholdFromDoc(p as { lowStockThreshold?: unknown }),
       barcode: String(p.barcode),
       imageUrl: mediaUrlFromRelation(p.image),
     },
+  }
+}
+
+/** Mal girişi / sayım düzeltmesi: tüm ürünler (POS’a kapalı olanlar dahil). */
+export async function lookupProductForStockAdjust(barcode: string): Promise<LookupResult> {
+  const { payload, user } = await requireStaff()
+  if (!payload || !user) {
+    return { ok: false, error: 'Oturum gerekli. Admin panelinden giriş yapın.' }
+  }
+
+  const trimmed = barcode.trim()
+  if (!trimmed) {
+    return { ok: false, error: 'Barkod boş olamaz.' }
+  }
+
+  const { docs } = await payload.find({
+    collection: 'products',
+    where: { barcode: { equals: trimmed } },
+    limit: 1,
+    depth: 1,
+    overrideAccess: true,
+  })
+
+  if (!docs.length) {
+    return { ok: false, error: 'Bu barkoda ait ürün yok.' }
+  }
+
+  const p = docs[0]
+  return {
+    ok: true,
+    product: {
+      id: String(p.id),
+      name: p.name,
+      salePrice: Number(p.salePrice),
+      stock: Number(p.stock),
+      lowStockThreshold: lowStockThresholdFromDoc(p as { lowStockThreshold?: unknown }),
+      barcode: String(p.barcode),
+      imageUrl: mediaUrlFromRelation(p.image),
+    },
+  }
+}
+
+export type ManualStockResult =
+  | { ok: true; newStock: number; productName: string }
+  | { ok: false; error: string }
+
+export async function applyManualStockDelta(
+  barcode: string,
+  deltaRaw: number,
+  note?: string | null,
+): Promise<ManualStockResult> {
+  const { payload, user } = await requireStaff()
+  if (!payload || !user) {
+    return { ok: false, error: 'Oturum gerekli. Admin panelinden giriş yapın.' }
+  }
+
+  const trimmed = String(barcode).trim()
+  if (!trimmed) {
+    return { ok: false, error: 'Barkod gerekli.' }
+  }
+
+  const delta = Math.trunc(Number(deltaRaw))
+  if (!Number.isFinite(delta) || delta === 0) {
+    return { ok: false, error: 'Geçerli adet girin (+ veya − tam sayı, sıfır olamaz).' }
+  }
+
+  const { docs } = await payload.find({
+    collection: 'products',
+    where: { barcode: { equals: trimmed } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  if (!docs.length) {
+    return { ok: false, error: 'Bu barkoda ait ürün yok.' }
+  }
+
+  const p = docs[0]
+  const pid = p.id
+
+  try {
+    await applyProductStockChange(payload, {
+      productId: pid,
+      delta,
+      type: delta > 0 ? 'purchase' : 'adjustment',
+      idempotencyKey: `sm:manual:${String(pid)}:${randomUUID()}`,
+      note: note?.trim() ? note.trim() : null,
+    })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Stok güncellenemedi.'
+    return { ok: false, error: message }
+  }
+
+  const updated = await payload.findByID({
+    collection: 'products',
+    id: String(pid),
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  return {
+    ok: true,
+    newStock: Number(updated.stock),
+    productName: String(updated.name),
   }
 }
 
@@ -83,6 +200,7 @@ export type StockSnapshot = {
   stock: number
   name: string
   salePrice: number
+  lowStockThreshold: number
   imageUrl: string | null
 }
 
@@ -115,6 +233,7 @@ export async function refreshCartStock(productIds: string[]): Promise<StockRefre
         stock: Number(p.stock),
         name: p.name,
         salePrice: Number(p.salePrice),
+        lowStockThreshold: lowStockThresholdFromDoc(p as { lowStockThreshold?: unknown }),
         imageUrl: mediaUrlFromRelation(p.image),
       })
     } catch {
@@ -123,6 +242,7 @@ export async function refreshCartStock(productIds: string[]): Promise<StockRefre
         stock: 0,
         name: 'Ürün',
         salePrice: 0,
+        lowStockThreshold: 5,
         imageUrl: null,
       })
     }
@@ -237,6 +357,7 @@ export async function listProductsForPos(categoryId?: string | null): Promise<Pr
         name: p.name,
         salePrice: Number(p.salePrice),
         stock: Number(p.stock),
+        lowStockThreshold: lowStockThresholdFromDoc(p as { lowStockThreshold?: unknown }),
         barcode: String(p.barcode),
         imageUrl: mediaUrlFromRelation(p.image),
       })),
@@ -280,10 +401,58 @@ export async function listProductsForPos(categoryId?: string | null): Promise<Pr
       name: p.name,
       salePrice: Number(p.salePrice),
       stock: Number(p.stock),
+      lowStockThreshold: lowStockThresholdFromDoc(p as { lowStockThreshold?: unknown }),
       barcode: String(p.barcode),
       imageUrl: mediaUrlFromRelation(p.image),
     })),
   }
+}
+
+/** Kasada görünür ürünlerden stok <= kritik eşik olanlar (eşik 0 = hariç). */
+export type CriticalStockRow = {
+  id: string
+  name: string
+  stock: number
+  lowStockThreshold: number
+  barcode: string
+}
+
+export type CriticalStockResult =
+  | { ok: true; items: CriticalStockRow[] }
+  | { ok: false; error: string }
+
+export async function listCriticalStockForPos(): Promise<CriticalStockResult> {
+  const { payload, user } = await requireStaff()
+  if (!payload || !user) {
+    return { ok: false, error: 'Oturum gerekli.' }
+  }
+
+  const { docs } = await payload.find({
+    collection: 'products',
+    where: posVisibilityWhere(),
+    sort: 'stock',
+    limit: 1000,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  const items: CriticalStockRow[] = []
+  for (const p of docs) {
+    const th = lowStockThresholdFromDoc(p as { lowStockThreshold?: unknown })
+    const stock = Number(p.stock)
+    if (th > 0 && stock <= th) {
+      items.push({
+        id: String(p.id),
+        name: p.name,
+        stock,
+        lowStockThreshold: th,
+        barcode: String(p.barcode),
+      })
+    }
+  }
+
+  items.sort((a, b) => a.stock - b.stock || a.name.localeCompare(b.name, 'tr'))
+  return { ok: true, items }
 }
 
 export type RefundLine = {

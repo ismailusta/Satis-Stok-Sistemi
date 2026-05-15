@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import React, { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 
+import { IyzicoCheckoutOverlay } from '../iyzico-checkout-overlay'
 import { startOnlinePayment } from '../actions'
 import { useMagazaAuth } from '../auth-context'
 import { useMagazaCart } from '../cart-context'
@@ -29,6 +30,7 @@ export function SepetClient() {
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [iyzicoEmbedHtml, setIyzicoEmbedHtml] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const [defaultAddress, setDefaultAddress] = useState<CustomerAddressRow | null>(null)
@@ -102,18 +104,29 @@ export function SepetClient() {
         customerName,
         phone,
         address,
+        returnOrigin: typeof window !== 'undefined' ? window.location.origin : undefined,
       })
       if (!res.ok) {
         setMessage({ type: 'err', text: res.error })
         return
       }
       setMessage(null)
+      if ('embedHtml' in res) {
+        setIyzicoEmbedHtml(res.embedHtml)
+        return
+      }
       window.location.assign(res.paymentPageUrl)
     })
   }
 
   return (
     <div className={styles.sepetPage}>
+      {iyzicoEmbedHtml ? (
+        <IyzicoCheckoutOverlay
+          html={iyzicoEmbedHtml}
+          onClose={() => setIyzicoEmbedHtml(null)}
+        />
+      ) : null}
       <h1 className={styles.pageTitle}>Sepetim</h1>
 
       {message && (

@@ -6,12 +6,20 @@ import {
   getIyzipayClient,
   Iyzico,
   publicAppBaseUrl,
+  validateCheckoutReturnOrigin,
   verifyCheckoutFormRetrieveSignature,
 } from '@/lib/iyzico'
 import config from '@/payload.config'
 
-function redirect(path: string) {
+function redirectDefault(path: string) {
   return NextResponse.redirect(new URL(path, publicAppBaseUrl()))
+}
+
+function redirectForOrder(path: string, order: { checkoutReturnOrigin?: string | null }) {
+  const base =
+    validateCheckoutReturnOrigin(order.checkoutReturnOrigin ?? undefined) ??
+    publicAppBaseUrl()
+  return NextResponse.redirect(new URL(path, base))
 }
 
 async function parseTokenFromBody(request: NextRequest): Promise<string | null> {
@@ -57,7 +65,7 @@ export async function POST(
 
 async function handleCallback(orderId: string, token: string | null) {
   if (!token) {
-    return redirect('/magaza/odeme/hata?neden=token')
+    return redirectDefault('/magaza/odeme/hata?neden=token')
   }
 
   const { secretKey } = getIyzipayClient()
@@ -70,20 +78,20 @@ async function handleCallback(orderId: string, token: string | null) {
       token,
     })
   } catch {
-    return redirect('/magaza/odeme/hata?neden=istek')
+    return redirectDefault('/magaza/odeme/hata?neden=istek')
   }
 
   if (result.status !== 'success') {
     const msg = result.errorMessage || result.errorCode || 'api'
-    return redirect(`/magaza/odeme/hata?neden=${encodeURIComponent(msg)}`)
+    return redirectDefault(`/magaza/odeme/hata?neden=${encodeURIComponent(msg)}`)
   }
 
   if (!verifyCheckoutFormRetrieveSignature(result, secretKey)) {
-    return redirect('/magaza/odeme/hata?neden=imza')
+    return redirectDefault('/magaza/odeme/hata?neden=imza')
   }
 
   if (String(result.conversationId ?? '') !== orderId) {
-    return redirect('/magaza/odeme/hata?neden=oturum')
+    return redirectDefault('/magaza/odeme/hata?neden=oturum')
   }
 
   const payloadConfig = await config
@@ -96,6 +104,7 @@ async function handleCallback(orderId: string, token: string | null) {
     totalAmount?: number
     orderNumber?: string | null
     notes?: string | null
+    checkoutReturnOrigin?: string | null
   }
 
   try {
@@ -106,21 +115,22 @@ async function handleCallback(orderId: string, token: string | null) {
       overrideAccess: true,
     })
   } catch {
-    return redirect('/magaza/odeme/hata?neden=siparis')
+    return redirectDefault('/magaza/odeme/hata?neden=siparis')
   }
 
   if (order.source !== 'online') {
-    return redirect('/magaza/odeme/hata?neden=kaynak')
+    return redirectForOrder('/magaza/odeme/hata?neden=kaynak', order)
   }
 
   if (order.status === 'completed') {
-    return redirect(
+    return redirectForOrder(
       `/magaza/odeme/basarili?no=${encodeURIComponent(String(order.orderNumber ?? ''))}`,
+      order,
     )
   }
 
   if (order.status !== 'draft') {
-    return redirect('/magaza/odeme/hata?neden=durum')
+    return redirectForOrder('/magaza/odeme/hata?neden=durum', order)
   }
 
   const expected = Number(order.totalAmount)
@@ -132,7 +142,7 @@ async function handleCallback(orderId: string, token: string | null) {
       data: { status: 'cancelled' },
       overrideAccess: true,
     })
-    return redirect('/magaza/odeme/hata?neden=tutar')
+    return redirectForOrder('/magaza/odeme/hata?neden=tutar', order)
   }
 
   if (result.paymentStatus !== 'SUCCESS') {
@@ -142,7 +152,7 @@ async function handleCallback(orderId: string, token: string | null) {
       data: { status: 'cancelled' },
       overrideAccess: true,
     })
-    return redirect('/magaza/odeme/hata?neden=odeme')
+    return redirectForOrder('/magaza/odeme/hata?neden=odeme', order)
   }
 
   const payNote = result.paymentId ? `\n[iyzico] paymentId: ${result.paymentId}` : ''
@@ -153,12 +163,14 @@ async function handleCallback(orderId: string, token: string | null) {
     id: order.id,
     data: {
       status: 'completed',
+      fulfillmentStatus: 'preparing',
       ...(nextNotes ? { notes: nextNotes } : {}),
     },
     overrideAccess: true,
   })
 
-  return redirect(
+  return redirectForOrder(
     `/magaza/odeme/basarili?no=${encodeURIComponent(String(order.orderNumber ?? ''))}`,
+    order,
   )
 }

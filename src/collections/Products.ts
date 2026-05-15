@@ -85,6 +85,19 @@ export const Products: CollectionConfig = {
       label: 'Mevcut stok',
     },
     {
+      name: 'lowStockThreshold',
+      type: 'number',
+      required: true,
+      defaultValue: 5,
+      min: 0,
+      label: 'Kritik stok seviyesi',
+      admin: {
+        description:
+          'Stok bu adedin altına veya eşit düştüğünde kasada uyarı verilir (ürün bazlı; örn. su 50, şampuan 3). 0 = uyarı kapalı.',
+        position: 'sidebar',
+      },
+    },
+    {
       name: 'showInStorefront',
       type: 'checkbox',
       label: 'Online mağazada göster',

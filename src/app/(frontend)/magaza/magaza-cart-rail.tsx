@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 
 import { useMagazaAuth } from './auth-context'
 import { useMagazaCart } from './cart-context'
+import { formatOnlineOrderStatus } from './magaza-order-status'
 import { listMyOrders, type MyOrderRow } from './hesabim-actions'
 import styles from './magaza.module.css'
 
@@ -139,6 +140,9 @@ export function MagazaCartRail() {
                     <div className={styles.pastOrdersMeta}>
                       <span className={styles.pastOrdersDate}>{formatDate(o.createdAt)}</span>
                       <span className={styles.pastOrdersNo}>#{o.orderNumber}</span>
+                      <span className={styles.pastOrdersStatus}>
+                        {formatOnlineOrderStatus(o)}
+                      </span>
                     </div>
                     <span className={styles.pastOrdersTotal}>
                       {o.totalAmount.toFixed(2)} ₺ · {itemCount(o)} ürün

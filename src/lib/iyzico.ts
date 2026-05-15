@@ -121,10 +121,70 @@ export function verifyCheckoutFormRetrieveSignature(
   return calculated === sig
 }
 
+/** Ödeme callback ve yönlendirmeler. APP_URL (sunucu) önce — aynı WiFi testinde 192.168.x.x kullanın. */
 export function publicAppBaseUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, '')
-  if (raw) return raw
+  const candidates = [
+    process.env.APP_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.LAN_DEV_ORIGIN,
+  ]
+  for (const c of candidates) {
+    const t = c?.trim().replace(/\/+$/, '')
+    if (t) return t
+  }
   return 'http://localhost:3000'
+}
+
+function addOriginFromBase(set: Set<string>, raw: string | undefined) {
+  const t = raw?.trim().replace(/\/+$/, '')
+  if (!t) return
+  try {
+    set.add(new URL(t).origin)
+  } catch {
+    /* */
+  }
+}
+
+/**
+ * Ödeme sonrası tarayıcı yönlendirmesi için güvenli origin listesi (açık yönlendirme yok).
+ * Geliştirmede aynı portta localhost / 127.0.0.1 de kabul edilir (APP_URL LAN iken oturum kaybı olmasın).
+ */
+export function getAllowedCheckoutReturnOrigins(): string[] {
+  const set = new Set<string>()
+  addOriginFromBase(set, process.env.APP_URL)
+  addOriginFromBase(set, process.env.NEXT_PUBLIC_APP_URL)
+  addOriginFromBase(set, process.env.LAN_DEV_ORIGIN)
+  addOriginFromBase(set, publicAppBaseUrl())
+
+  try {
+    const u = new URL(publicAppBaseUrl())
+    set.add(u.origin)
+    if (process.env.NODE_ENV !== 'production') {
+      const port = u.port
+      if (port) {
+        set.add(`http://localhost:${port}`)
+        set.add(`http://127.0.0.1:${port}`)
+      }
+    }
+  } catch {
+    /* */
+  }
+
+  return [...set]
+}
+
+/** Mağaza checkout’tan gelen `window.location.origin` — yalnızca izin listesindeyse döner. */
+export function validateCheckoutReturnOrigin(candidate: string | undefined | null): string | null {
+  if (!candidate || typeof candidate !== 'string') return null
+  const t = candidate.trim()
+  if (!t) return null
+  try {
+    const origin = new URL(t).origin
+    const allowed = getAllowedCheckoutReturnOrigins()
+    return allowed.includes(origin) ? origin : null
+  } catch {
+    return null
+  }
 }
 
 /** İyzico CF-Retrieve için conversationId ile aynı olmalı (sipariş id). */

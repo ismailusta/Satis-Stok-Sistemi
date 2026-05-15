@@ -1,0 +1,168 @@
+.wrap {
+  min-height: 100dvh;
+  padding: 1rem 1rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  max-width: 28rem;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.head {
+  margin-bottom: 1rem;
+}
+
+.head h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.head p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #9aa0a6;
+}
+
+.empty {
+  margin: 2rem 0;
+  text-align: center;
+  color: #9aa0a6;
+  font-size: 0.95rem;
+}
+
+.err {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: rgba(197, 34, 31, 0.2);
+  border: 1px solid #c5221f;
+  color: #f28b82;
+  font-size: 0.88rem;
+  margin-bottom: 1rem;
+}
+
+.okFlash {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: rgba(52, 168, 83, 0.18);
+  border: 1px solid #34a853;
+  color: #81c995;
+  font-size: 0.88rem;
+  margin-bottom: 1rem;
+}
+
+.card {
+  background: #1e2329;
+  border: 1px solid #3c4043;
+  border-radius: 14px;
+  padding: 1rem 1.05rem;
+  margin-bottom: 0.85rem;
+}
+
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.orderNo {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(138, 180, 248, 0.15);
+  color: #8ab4f8;
+}
+
+.badgeTransit {
+  background: rgba(251, 188, 4, 0.15);
+  color: #fdd663;
+}
+
+.addr {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #bdc1c6;
+  margin-bottom: 0.75rem;
+}
+
+.addr strong {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #9aa0a6;
+  margin-bottom: 0.25rem;
+}
+
+.meta {
+  font-size: 0.82rem;
+  color: #9aa0a6;
+  margin-bottom: 0.85rem;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.btnPrimary,
+.btnSecondary {
+  width: 100%;
+  padding: 1rem 1rem;
+  border-radius: 12px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: none;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.btnPrimary {
+  background: #1a73e8;
+  color: #fff;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btnPrimary:not(:disabled):hover {
+  filter: brightness(1.06);
+}
+
+.btnSecondary {
+  background: #3c4043;
+  color: #e8eaed;
+  border: 1px solid #5f6368;
+}
+
+.btnSecondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin-top: 1.5rem;
+  font-size: 0.78rem;
+  color: #5f6368;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.invalid {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #9aa0a6;
+}

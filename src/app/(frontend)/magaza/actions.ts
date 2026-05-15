@@ -8,6 +8,7 @@ import {
   checkoutFormInitializeCreate,
   Iyzico,
   iyzicoCallbackAbsoluteUrlForOrder,
+  validateCheckoutReturnOrigin,
 } from '@/lib/iyzico'
 
 import {
@@ -506,9 +507,12 @@ export type OnlineCheckoutInput = {
   customerName: string
   phone: string
   address: string
+  /** Örn. `window.location.origin` — ödeme sonrası aynı hosta dönüş (localhost vs LAN). */
+  returnOrigin?: string
 }
 
 export type StartOnlinePaymentResult =
+  | { ok: true; embedHtml: string }
   | { ok: true; paymentPageUrl: string }
   | { ok: false; error: string }
 
@@ -690,6 +694,8 @@ export async function startOnlinePayment(input: OnlineCheckoutInput): Promise<St
       customerEmail = typeof em === 'string' ? em : null
     }
 
+    const savedOrigin = validateCheckoutReturnOrigin(input.returnOrigin)
+
     const order = await payload.create({
       collection: 'orders',
       data: {
@@ -701,6 +707,7 @@ export async function startOnlinePayment(input: OnlineCheckoutInput): Promise<St
         cashReceived: null,
         changeGiven: null,
         notes,
+        ...(savedOrigin ? { checkoutReturnOrigin: savedOrigin } : {}),
         ...(session.ok ? { customer: Number(session.customerId) } : {}),
       },
       overrideAccess: true,
@@ -782,6 +789,11 @@ export async function startOnlinePayment(input: OnlineCheckoutInput): Promise<St
       return { ok: false, error: detail }
     }
 
+    const embed = initResult.checkoutFormContent
+    if (typeof embed === 'string' && embed.trim().length > 0) {
+      return { ok: true, embedHtml: embed }
+    }
+
     const pageUrl = initResult.paymentPageUrl
     if (typeof pageUrl === 'string' && pageUrl.startsWith('http')) {
       return { ok: true, paymentPageUrl: pageUrl }
@@ -796,7 +808,7 @@ export async function startOnlinePayment(input: OnlineCheckoutInput): Promise<St
     return {
       ok: false,
       error:
-        'İyzico ödeme sayfası adresi alınamadı (paymentPageUrl). Ortam anahtarlarını ve API yanıtını kontrol edin.',
+        'İyzico ödeme formu alınamadı (checkoutFormContent / paymentPageUrl). Ortam anahtarlarını ve API yanıtını kontrol edin.',
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Sipariş oluşturulamadı.'

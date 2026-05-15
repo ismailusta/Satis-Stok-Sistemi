@@ -2,7 +2,16 @@
 
 import React, { useCallback, useEffect, useState, useTransition } from 'react'
 
-import { getSalesSummary, getTopProducts, type TopProductRow } from './actions'
+import {
+  getSalesSummary,
+  getSalesTrends,
+  getTopCategories,
+  getTopProducts,
+  type SalesTrendPoint,
+  type TopCategoryRow,
+  type TopProductRow,
+} from './actions'
+import { RaporCharts } from './rapor-charts'
 import styles from './rapor.module.css'
 
 function toDateInputValue(d: Date): string {
@@ -27,6 +36,11 @@ export function RaporClient() {
     bySource: { pos: number; online: number }
   } | null>(null)
   const [topRows, setTopRows] = useState<TopProductRow[]>([])
+  const [categoryRows, setCategoryRows] = useState<TopCategoryRow[]>([])
+  const [trends, setTrends] = useState<{
+    byMonth: SalesTrendPoint[]
+    byYear: SalesTrendPoint[]
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
@@ -37,6 +51,8 @@ export function RaporClient() {
         setError(s.error)
         setSummary(null)
         setTopRows([])
+        setCategoryRows([])
+        setTrends(null)
         return
       }
       setSummary({
@@ -45,13 +61,32 @@ export function RaporClient() {
         bySource: s.bySource,
       })
 
-      const t = await getTopProducts(from, to, 15)
+      const [t, c, tr] = await Promise.all([
+        getTopProducts(from, to, 15),
+        getTopCategories(from, to, 15),
+        getSalesTrends(from, to),
+      ])
+
       if (!t.ok) {
         setError(t.error)
         setTopRows([])
-        return
+      } else {
+        setTopRows(t.rows)
       }
-      setTopRows(t.rows)
+
+      if (!c.ok) {
+        setError((prev) => prev ?? c.error)
+        setCategoryRows([])
+      } else {
+        setCategoryRows(c.rows)
+      }
+
+      if (!tr.ok) {
+        setTrends(null)
+        setError((prev) => prev ?? tr.error)
+      } else {
+        setTrends({ byMonth: tr.byMonth, byYear: tr.byYear })
+      }
     })
   }, [from, to])
 
@@ -109,13 +144,54 @@ export function RaporClient() {
         </div>
       )}
 
-      <h2 className={styles.sectionTitle}>En çok satan ürünler (tamamlanan siparişler)</h2>
+      {trends && (
+        <>
+          <h2 className={styles.sectionTitle}>Aylık ve yıllık satış (POS / online)</h2>
+          <p className={styles.sub} style={{ marginTop: '-0.5rem', marginBottom: '1rem' }}>
+            Tarih filtresine göre gruplanır; grafik üzerinde POS ve online yüzdeleri gösterilir.
+          </p>
+          <RaporCharts byMonth={trends.byMonth} byYear={trends.byYear} />
+        </>
+      )}
+
+      <h2 className={styles.sectionTitle}>Kategoriler (net satış)</h2>
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Kategori</th>
+              <th>Adet</th>
+              <th>Ciro (₺)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {categoryRows.length === 0 ? (
+              <tr>
+                <td colSpan={4}>{isPending ? '…' : 'Bu aralıkta veri yok.'}</td>
+              </tr>
+            ) : (
+              categoryRows.map((r, i) => (
+                <tr key={r.categoryId}>
+                  <td>{i + 1}</td>
+                  <td>{r.name}</td>
+                  <td>{r.qtySold}</td>
+                  <td>{r.revenue.toFixed(2)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <h2 className={styles.sectionTitle}>En çok satan ürünler (net satış)</h2>
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead>
             <tr>
               <th>#</th>
               <th>Ürün</th>
+              <th>Kategori</th>
               <th>Adet</th>
               <th>Ciro (₺)</th>
             </tr>
@@ -123,15 +199,14 @@ export function RaporClient() {
           <tbody>
             {topRows.length === 0 ? (
               <tr>
-                <td colSpan={4}>
-                  {isPending ? '…' : 'Bu aralıkta veri yok.'}
-                </td>
+                <td colSpan={5}>{isPending ? '…' : 'Bu aralıkta veri yok.'}</td>
               </tr>
             ) : (
               topRows.map((r, i) => (
                 <tr key={r.productId}>
                   <td>{i + 1}</td>
                   <td>{r.name}</td>
+                  <td>{r.categoryName}</td>
                   <td>{r.qtySold}</td>
                   <td>{r.revenue.toFixed(2)}</td>
                 </tr>

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import React, { useCallback, useEffect, useState } from 'react'
 
 import { useMagazaAuth } from '../auth-context'
+import { formatOnlineOrderStatus } from '../magaza-order-status'
 import { listMyOrders, type MyOrderRow } from '../hesabim-actions'
 import styles from '../magaza.module.css'
 
@@ -23,6 +24,32 @@ function formatDate(iso: string) {
 
 function itemCount(o: MyOrderRow): number {
   return o.items.reduce((s, i) => s + i.quantity, 0)
+}
+
+function OrderDeliveryTrack({ o }: { o: MyOrderRow }) {
+  if (o.orderStatus !== 'completed') return null
+  const f = o.fulfillmentStatus || 'preparing'
+  const labels = ['Hazırlanıyor', 'Yolda', 'Teslim edildi'] as const
+  let currentIdx = 0
+  if (f === 'in_transit') currentIdx = 1
+  if (f === 'delivered') currentIdx = 2
+  const allDone = f === 'delivered'
+
+  return (
+    <ol className={styles.orderDeliveryTrack} aria-label="Teslimat adımları">
+      {labels.map((label, i) => {
+        let itemClass = styles.orderDeliveryStepTodo
+        if (allDone || i < currentIdx) itemClass = styles.orderDeliveryStepDone
+        else if (i === currentIdx) itemClass = styles.orderDeliveryStepCurrent
+        return (
+          <li className={itemClass} key={label}>
+            <span className={styles.orderDeliveryDot} aria-hidden />
+            <span>{label}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
 }
 
 export function SiparislerClient() {
@@ -102,6 +129,10 @@ export function SiparislerClient() {
                 <div>
                   <strong>#{o.orderNumber}</strong>
                   <span className={styles.orderHistoryDate}>{formatDate(o.createdAt)}</span>
+                  <span className={styles.orderStatusBadge}>
+                    {formatOnlineOrderStatus(o)}
+                  </span>
+                  <OrderDeliveryTrack o={o} />
                 </div>
                 <div className={styles.orderHistoryRight}>
                   <span>{itemCount(o)} ürün</span>

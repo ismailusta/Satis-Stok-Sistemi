@@ -45,6 +45,10 @@ export type MyOrderRow = {
   orderNumber: string
   totalAmount: number
   createdAt: string
+  /** Ödeme / iade durumu (draft, completed, cancelled, …) */
+  orderStatus: string
+  /** Online siparişlerde teslim adımı; POS için na */
+  fulfillmentStatus: string | null
   items: Array<{
     quantity: number
     lineTotal: number
@@ -107,6 +111,8 @@ export async function listMyOrders(): Promise<
         orderNumber: String(doc.orderNumber ?? ''),
         totalAmount: Number(doc.totalAmount ?? 0),
         createdAt: createdAtIso,
+        orderStatus: String((doc as { status?: string }).status ?? ''),
+        fulfillmentStatus: (doc as { fulfillmentStatus?: string | null }).fulfillmentStatus ?? null,
         items,
       }
     })

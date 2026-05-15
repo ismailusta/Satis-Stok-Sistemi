@@ -71,10 +71,12 @@ export interface Config {
     media: Media;
     categories: Category;
     products: Product;
+    'stock-movements': StockMovement;
     customers: Customer;
     'customer-addresses': CustomerAddress;
     'customer-payment-methods': CustomerPaymentMethod;
     'phone-otps': PhoneOtp;
+    couriers: Courier;
     orders: Order;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -87,10 +89,12 @@ export interface Config {
     media: MediaSelect<false> | MediaSelect<true>;
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
     products: ProductsSelect<false> | ProductsSelect<true>;
+    'stock-movements': StockMovementsSelect<false> | StockMovementsSelect<true>;
     customers: CustomersSelect<false> | CustomersSelect<true>;
     'customer-addresses': CustomerAddressesSelect<false> | CustomerAddressesSelect<true>;
     'customer-payment-methods': CustomerPaymentMethodsSelect<false> | CustomerPaymentMethodsSelect<true>;
     'phone-otps': PhoneOtpsSelect<false> | PhoneOtpsSelect<true>;
+    couriers: CouriersSelect<false> | CouriersSelect<true>;
     orders: OrdersSelect<false> | OrdersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -238,6 +242,10 @@ export interface Product {
   vatRate: number;
   stock: number;
   /**
+   * Stok bu adedin altına veya eşit düştüğünde kasada uyarı verilir (ürün bazlı; örn. su 50, şampuan 3). 0 = uyarı kapalı.
+   */
+  lowStockThreshold: number;
+  /**
    * Kapalıysa ürün internet mağazasında listelenmez (ör. alkollü içecekler). Kasada satış ayrıca “POS’ta sat” ile yönetilir.
    */
   showInStorefront?: boolean | null;
@@ -245,6 +253,104 @@ export interface Product {
    * Kapalıysa barkod ile kasada bu ürün satılamaz.
    */
   showInPos?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Her stok değişimi bir kayıt olarak tutulur. Aynı işlem iki kez tetiklenirse idempotency anahtarı ikinci kaydı engeller.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "stock-movements".
+ */
+export interface StockMovement {
+  id: number;
+  product: number | Product;
+  /**
+   * Pozitif: stok artar, negatif: stok azalır.
+   */
+  delta: number;
+  type: 'purchase' | 'sale' | 'refund' | 'order_release' | 'adjustment';
+  /**
+   * Satış, iade ve sipariş kapanışı hareketlerinde doldurulur.
+   */
+  order?: (number | null) | Order;
+  /**
+   * Payload array satırının id değeri (siparişe bağlı hareketlerde).
+   */
+  orderLineId?: string | null;
+  note?: string | null;
+  /**
+   * Aynı anahtarla ikinci kayıt oluşturulmaz; stok iki kez değişmez.
+   */
+  idempotencyKey: string;
+  recordedBy?: (number | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Tamamlanan satış stoktan düşer. Satır iadesi (İade edilen adet) stoku geri verir. Tam iptal/iade durumunda kalan adetler geri yüklenir.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "orders".
+ */
+export interface Order {
+  id: number;
+  orderNumber?: string | null;
+  source: 'pos' | 'online';
+  /**
+   * Online ödeme: müşterinin checkout anındaki tarayıcı origin’i. İyzico callback sonrası başarı/hata sayfası bu hosta yönlendirilir (localhost ile APP_URL farkındayken oturum çerezi korunur).
+   */
+  checkoutReturnOrigin?: string | null;
+  status: 'draft' | 'completed' | 'partially_refunded' | 'cancelled' | 'refunded';
+  /**
+   * Sadece online siparişlerde anlamlıdır (POS siparişlerinde “uygun değil” kalır). Ödeme tamamlanınca genelde “Hazırlanıyor” ile başlar; kurye çıkınca ve teslimde güncellenir.
+   */
+  fulfillmentStatus?: ('na' | 'preparing' | 'in_transit' | 'delivered') | null;
+  /**
+   * POS üzerinden "Sipariş iade kapat" ile true olur; kısmi iade varken listede yanlışlıkla tam iade görünmesini engeller.
+   */
+  refundClosed?: boolean | null;
+  /**
+   * İsteğe bağlı (kayıtlı müşteri veya online sipariş)
+   */
+  customer?: (number | null) | Customer;
+  /**
+   * Online siparişte teslimatı taşıyacak kurye (mobil ekrandan güncellenir).
+   */
+  assignedCourier?: (number | null) | Courier;
+  items?:
+    | {
+        product: number | Product;
+        quantity: number;
+        unitPrice: number;
+        /**
+         * İade edilmemiş adet × birim fiyat. Kısmi iade sonrası otomatik güncellenir.
+         */
+        lineTotal: number;
+        /**
+         * Bu satırdan depoya geri dönen adet (satır bazlı iade).
+         */
+        quantityRefunded: number;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Satır kalan tutarlarının toplamı; iade sonrası düşer.
+   */
+  totalAmount: number;
+  /**
+   * POS satışlarında kaydedilir.
+   */
+  paymentMethod?: ('cash' | 'card' | 'credit') | null;
+  /**
+   * Sadece nakit ödemede.
+   */
+  cashReceived?: number | null;
+  /**
+   * Nakit ödemede hesaplanan para üstü.
+   */
+  changeGiven?: number | null;
+  notes?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -272,6 +378,31 @@ export interface Customer {
   marketingEmail?: boolean | null;
   marketingSms?: boolean | null;
   orderStatusSms?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Kurye kaydı. Mobil ekran adresi: /kurye/[erişim anahtarı]. Yeni kayıtta anahtar otomatik üretilir.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "couriers".
+ */
+export interface Courier {
+  id: number;
+  name: string;
+  phone: string;
+  /**
+   * İsteğe bağlı (motosiklet plakası vb.).
+   */
+  plate?: string | null;
+  /**
+   * Atanmış aktif teslimat (hazırlanıyor / yolda) varken otomatik kapanır; teslimde tekrar açılır.
+   */
+  isAvailable?: boolean | null;
+  /**
+   * Kurye telefonundan açılacak adres: /kurye/[bu değer]. Güvenlik için paylaşmayın.
+   */
+  accessToken?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -325,61 +456,6 @@ export interface PhoneOtp {
   createdAt: string;
 }
 /**
- * Tamamlanan satış stoktan düşer. Satır iadesi (İade edilen adet) stoku geri verir. Tam iptal/iade durumunda kalan adetler geri yüklenir.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "orders".
- */
-export interface Order {
-  id: number;
-  orderNumber?: string | null;
-  source: 'pos' | 'online';
-  status: 'draft' | 'completed' | 'partially_refunded' | 'cancelled' | 'refunded';
-  /**
-   * POS üzerinden "Sipariş iade kapat" ile true olur; kısmi iade varken listede yanlışlıkla tam iade görünmesini engeller.
-   */
-  refundClosed?: boolean | null;
-  /**
-   * İsteğe bağlı (kayıtlı müşteri veya online sipariş)
-   */
-  customer?: (number | null) | Customer;
-  items?:
-    | {
-        product: number | Product;
-        quantity: number;
-        unitPrice: number;
-        /**
-         * İade edilmemiş adet × birim fiyat. Kısmi iade sonrası otomatik güncellenir.
-         */
-        lineTotal: number;
-        /**
-         * Bu satırdan depoya geri dönen adet (satır bazlı iade).
-         */
-        quantityRefunded: number;
-        id?: string | null;
-      }[]
-    | null;
-  /**
-   * Satır kalan tutarlarının toplamı; iade sonrası düşer.
-   */
-  totalAmount: number;
-  /**
-   * POS satışlarında kaydedilir.
-   */
-  paymentMethod?: ('cash' | 'card' | 'credit') | null;
-  /**
-   * Sadece nakit ödemede.
-   */
-  cashReceived?: number | null;
-  /**
-   * Nakit ödemede hesaplanan para üstü.
-   */
-  changeGiven?: number | null;
-  notes?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -420,6 +496,10 @@ export interface PayloadLockedDocument {
         value: number | Product;
       } | null)
     | ({
+        relationTo: 'stock-movements';
+        value: number | StockMovement;
+      } | null)
+    | ({
         relationTo: 'customers';
         value: number | Customer;
       } | null)
@@ -434,6 +514,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'phone-otps';
         value: number | PhoneOtp;
+      } | null)
+    | ({
+        relationTo: 'couriers';
+        value: number | Courier;
       } | null)
     | ({
         relationTo: 'orders';
@@ -548,8 +632,25 @@ export interface ProductsSelect<T extends boolean = true> {
   salePrice?: T;
   vatRate?: T;
   stock?: T;
+  lowStockThreshold?: T;
   showInStorefront?: T;
   showInPos?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "stock-movements_select".
+ */
+export interface StockMovementsSelect<T extends boolean = true> {
+  product?: T;
+  delta?: T;
+  type?: T;
+  order?: T;
+  orderLineId?: T;
+  note?: T;
+  idempotencyKey?: T;
+  recordedBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -613,14 +714,30 @@ export interface PhoneOtpsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "couriers_select".
+ */
+export interface CouriersSelect<T extends boolean = true> {
+  name?: T;
+  phone?: T;
+  plate?: T;
+  isAvailable?: T;
+  accessToken?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "orders_select".
  */
 export interface OrdersSelect<T extends boolean = true> {
   orderNumber?: T;
   source?: T;
+  checkoutReturnOrigin?: T;
   status?: T;
+  fulfillmentStatus?: T;
   refundClosed?: T;
   customer?: T;
+  assignedCourier?: T;
   items?:
     | T
     | {

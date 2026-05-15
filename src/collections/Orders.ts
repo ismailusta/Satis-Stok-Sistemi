@@ -1,5 +1,7 @@
 import type { CollectionConfig, Payload, PayloadRequest } from 'payload'
 
+import { applyProductStockChange } from '@/lib/stock-movements'
+
 type OrderLine = {
   id?: string | null
   product: unknown
@@ -60,32 +62,85 @@ function assertCompletedOrderItemsOnlyRefunds(
   }
 }
 
-async function applyStockDelta(
+function relationshipId(raw: unknown): string | null {
+  if (raw == null || raw === false) return null
+  if (typeof raw === 'object' && raw && 'id' in raw) return String((raw as { id: unknown }).id)
+  if (typeof raw === 'string' || typeof raw === 'number') return String(raw)
+  return null
+}
+
+async function syncCourierAvailability(payload: Payload, courierId: string | number) {
+  const { docs } = await payload.find({
+    collection: 'orders',
+    where: {
+      and: [
+        { source: { equals: 'online' } },
+        { status: { equals: 'completed' } },
+        { assignedCourier: { equals: courierId } },
+        {
+          or: [
+            { fulfillmentStatus: { equals: 'preparing' } },
+            { fulfillmentStatus: { equals: 'in_transit' } },
+          ],
+        },
+      ],
+    },
+    limit: 200,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const busy = docs.length > 0
+  try {
+    await payload.update({
+      collection: 'couriers',
+      id: courierId,
+      data: { isAvailable: !busy },
+      overrideAccess: true,
+    })
+  } catch {
+    /* kurye silinmiş olabilir */
+  }
+}
+
+async function syncCouriersAffectedByOrder(
   payload: Payload,
+  doc: Record<string, unknown>,
+  previousDoc: Record<string, unknown> | null | undefined,
+) {
+  const ids = new Set<string>()
+  const add = (raw: unknown) => {
+    const id = relationshipId(raw)
+    if (id) ids.add(id)
+  }
+  add(doc.assignedCourier)
+  if (previousDoc) add(previousDoc.assignedCourier)
+  for (const id of ids) {
+    await syncCourierAvailability(payload, id)
+  }
+}
+
+/** Tamamlanan satış: her satır için stok düşümü + stok hareketi (idempotent). */
+async function applyCompletedOrderSaleStock(
+  payload: Payload,
+  orderId: string | number,
   lines: OrderLine[] | undefined | null,
-  sign: -1 | 1,
   req: PayloadRequest,
 ) {
-  for (const line of lines || []) {
+  const list = lines || []
+  for (let i = 0; i < list.length; i++) {
+    const line = list[i]
     const pid = getProductId(line.product)
     if (pid === undefined) continue
-
-    const product = await payload.findByID({
-      collection: 'products',
-      id: String(pid),
-      depth: 0,
-      req,
-    })
-
-    const next = product.stock + sign * line.quantity
-    if (next < 0) {
-      throw new Error(`Stok yetersiz veya tutarsız: ${product.name}`)
-    }
-
-    await payload.update({
-      collection: 'products',
-      id: product.id,
-      data: { stock: next },
+    const qty = Math.floor(Number(line.quantity))
+    if (qty < 1) continue
+    const lineKey = line.id != null && line.id !== '' ? String(line.id) : `idx-${i}`
+    await applyProductStockChange(payload, {
+      productId: pid,
+      delta: -qty,
+      type: 'sale',
+      idempotencyKey: `sm:sale:${orderId}:${lineKey}`,
+      orderId,
+      orderLineId: line.id != null ? String(line.id) : undefined,
       req,
     })
   }
@@ -95,7 +150,16 @@ export const Orders: CollectionConfig = {
   slug: 'orders',
   admin: {
     useAsTitle: 'orderNumber',
-    defaultColumns: ['orderNumber', 'source', 'status', 'paymentMethod', 'totalAmount', 'createdAt'],
+    defaultColumns: [
+      'orderNumber',
+      'source',
+      'status',
+      'fulfillmentStatus',
+      'assignedCourier',
+      'paymentMethod',
+      'totalAmount',
+      'createdAt',
+    ],
     description:
       'Tamamlanan satış stoktan düşer. Satır iadesi (İade edilen adet) stoku geri verir. Tam iptal/iade durumunda kalan adetler geri yüklenir.',
   },
@@ -122,6 +186,16 @@ export const Orders: CollectionConfig = {
       ],
     },
     {
+      name: 'checkoutReturnOrigin',
+      type: 'text',
+      label: 'Ödeme sonrası yönlendirme (origin)',
+      admin: {
+        hidden: true,
+        description:
+          'Online ödeme: müşterinin checkout anındaki tarayıcı origin’i. İyzico callback sonrası başarı/hata sayfası bu hosta yönlendirilir (localhost ile APP_URL farkındayken oturum çerezi korunur).',
+      },
+    },
+    {
       name: 'status',
       type: 'select',
       required: true,
@@ -133,6 +207,23 @@ export const Orders: CollectionConfig = {
         { label: 'Kısmi iade', value: 'partially_refunded' },
         { label: 'İptal', value: 'cancelled' },
         { label: 'İade (kapatıldı)', value: 'refunded' },
+      ],
+    },
+    {
+      name: 'fulfillmentStatus',
+      type: 'select',
+      required: false,
+      label: 'Teslim (online)',
+      admin: {
+        description:
+          'Sadece online siparişlerde anlamlıdır (POS siparişlerinde “uygun değil” kalır). Ödeme tamamlanınca genelde “Hazırlanıyor” ile başlar; kurye çıkınca ve teslimde güncellenir.',
+        position: 'sidebar',
+      },
+      options: [
+        { label: 'Uygun değil (POS)', value: 'na' },
+        { label: 'Hazırlanıyor', value: 'preparing' },
+        { label: 'Yolda', value: 'in_transit' },
+        { label: 'Teslim edildi', value: 'delivered' },
       ],
     },
     {
@@ -153,6 +244,16 @@ export const Orders: CollectionConfig = {
       label: 'Müşteri',
       admin: {
         description: 'İsteğe bağlı (kayıtlı müşteri veya online sipariş)',
+      },
+    },
+    {
+      name: 'assignedCourier',
+      type: 'relationship',
+      relationTo: 'couriers',
+      label: 'Atanan kurye',
+      admin: {
+        position: 'sidebar',
+        description: 'Online siparişte teslimatı taşıyacak kurye (mobil ekrandan güncellenir).',
       },
     },
     {
@@ -312,6 +413,15 @@ export const Orders: CollectionConfig = {
           data.totalAmount = 0
         }
 
+        const mergedStatus = (data.status ?? originalDoc?.status) as string | undefined
+        if (data.source === 'pos') {
+          data.fulfillmentStatus = 'na'
+        } else if (data.source === 'online') {
+          if (mergedStatus === 'completed' && (!data.fulfillmentStatus || data.fulfillmentStatus === 'na')) {
+            data.fulfillmentStatus = 'preparing'
+          }
+        }
+
         // Satır iadesine göre durum: sadece tüm satırlar tam iadeyse "İade (kapatıldı)".
         // refundClosed: POS "kapat" ile set; not kaydında gerçekten kapatılmış siparişi bozmamak için.
         if (data.items?.length) {
@@ -386,7 +496,12 @@ export const Orders: CollectionConfig = {
     afterChange: [
       async ({ doc, previousDoc, operation, req }) => {
         if (operation === 'create' && doc.status === 'completed') {
-          await applyStockDelta(req.payload, doc.items as OrderLine[], -1, req)
+          await applyCompletedOrderSaleStock(
+            req.payload,
+            doc.id,
+            doc.items as OrderLine[],
+            req,
+          )
           return
         }
 
@@ -395,7 +510,12 @@ export const Orders: CollectionConfig = {
           previousDoc?.status === 'draft' &&
           doc.status === 'completed'
         ) {
-          await applyStockDelta(req.payload, doc.items as OrderLine[], -1, req)
+          await applyCompletedOrderSaleStock(
+            req.payload,
+            doc.id,
+            doc.items as OrderLine[],
+            req,
+          )
         }
 
         if (operation !== 'update' || !previousDoc) {
@@ -405,18 +525,25 @@ export const Orders: CollectionConfig = {
         const prevItems = (previousDoc.items ?? []) as OrderLine[]
         const docItems = (doc.items ?? []) as OrderLine[]
 
-        for (const item of docItems) {
+        for (let i = 0; i < docItems.length; i++) {
+          const item = docItems[i]
           const prev = prevItems.find((p) => p.id === item.id)
           const oldR = Number(prev?.quantityRefunded ?? 0)
           const newR = Number(item.quantityRefunded ?? 0)
           const delta = newR - oldR
           if (delta > 0) {
-            await applyStockDelta(
-              req.payload,
-              [{ ...item, quantity: delta } as OrderLine],
-              1,
+            const pid = getProductId(item.product)
+            if (pid === undefined) continue
+            const lineKey = item.id != null && item.id !== '' ? String(item.id) : `idx-${i}`
+            await applyProductStockChange(req.payload, {
+              productId: pid,
+              delta,
+              type: 'refund',
+              idempotencyKey: `sm:refund:${doc.id}:${lineKey}:${oldR}-${newR}`,
+              orderId: doc.id,
+              orderLineId: item.id != null ? String(item.id) : undefined,
               req,
-            )
+            })
           }
         }
 
@@ -424,20 +551,34 @@ export const Orders: CollectionConfig = {
           isSaleLockedStatus(previousDoc.status) &&
           (doc.status === 'cancelled' || doc.status === 'refunded')
         ) {
-          for (const item of docItems) {
+          for (let i = 0; i < docItems.length; i++) {
+            const item = docItems[i]
             const qty = Number(item.quantity)
             const ref = Number(item.quantityRefunded ?? 0)
             const remainder = qty - ref
             if (remainder > 0) {
-              await applyStockDelta(
-                req.payload,
-                [{ ...item, quantity: remainder } as OrderLine],
-                1,
+              const pid = getProductId(item.product)
+              if (pid === undefined) continue
+              const lineKey = item.id != null && item.id !== '' ? String(item.id) : `idx-${i}`
+              await applyProductStockChange(req.payload, {
+                productId: pid,
+                delta: remainder,
+                type: 'order_release',
+                idempotencyKey: `sm:release:${doc.id}:${lineKey}:${doc.status}`,
+                orderId: doc.id,
+                orderLineId: item.id != null ? String(item.id) : undefined,
                 req,
-              )
+              })
             }
           }
         }
+      },
+      async ({ doc, previousDoc, req }) => {
+        await syncCouriersAffectedByOrder(
+          req.payload,
+          doc as Record<string, unknown>,
+          previousDoc as Record<string, unknown> | undefined,
+        )
       },
     ],
   },

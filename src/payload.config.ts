@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 
 import { Categories } from './collections/Categories'
+import { Couriers } from './collections/Couriers'
 import { CustomerAddresses } from './collections/CustomerAddresses'
 import { CustomerPaymentMethods } from './collections/CustomerPaymentMethods'
 import { Customers } from './collections/Customers'
@@ -13,6 +14,7 @@ import { Media } from './collections/Media'
 import { Orders } from './collections/Orders'
 import { PhoneOtps } from './collections/PhoneOtps'
 import { Products } from './collections/Products'
+import { StockMovements } from './collections/StockMovements'
 import { Users } from './collections/Users'
 import { StorefrontHome } from './globals/StorefrontHome'
 
@@ -31,10 +33,12 @@ export default buildConfig({
     Media,
     Categories,
     Products,
+    StockMovements,
     Customers,
     CustomerAddresses,
     CustomerPaymentMethods,
     PhoneOtps,
+    Couriers,
     Orders,
   ],
   globals: [StorefrontHome],

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "cross-env NODE_OPTIONS=\"--no-deprecation --max-old-space-size=8000\" next build",
-    "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev --no-server-fast-refresh",
+    "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev --hostname 0.0.0.0 --port 3000 --no-server-fast-refresh",
     "dev:lan": "cross-env NODE_OPTIONS=--no-deprecation next dev --hostname 0.0.0.0 --port 3000 --no-server-fast-refresh",
     "devsafe": "rm -rf .next && cross-env NODE_OPTIONS=--no-deprecation next dev",
     "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
@@ -16,13 +16,15 @@
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "test": "pnpm run test:int && pnpm run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts",
-    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts"
+    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
+    "report:telegram": "cross-env NODE_OPTIONS=--no-deprecation tsx scripts/send-weekly-report.ts"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.81.0",
     "@payloadcms/next": "3.81.0",
     "@payloadcms/richtext-lexical": "3.81.0",
     "@payloadcms/ui": "3.81.0",
+    "croner": "^10.0.1",
     "cross-env": "^7.0.3",
     "dotenv": "16.4.7",
     "graphql": "^16.8.1",
@@ -31,7 +33,9 @@
     "payload": "3.81.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "sharp": "0.34.2"
+    "recharts": "^3.8.1",
+    "sharp": "0.34.2",
+    "sonner": "^2.0.7"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",

@@ -11,19 +11,24 @@ import React, {
 
 import {
   applyLineRefunds,
+  applyManualStockDelta,
   getOrderForRefund,
   listCategoriesForPos,
+  listCriticalStockForPos,
   listProductsForPos,
   lookupProductByBarcode,
+  lookupProductForStockAdjust,
   refreshCartStock,
   submitOrderRefund,
   submitPosSale,
   type PosCategoryGroup,
+  type CriticalStockRow,
   type PosPaymentMethod,
   type PosProduct,
   type StockSnapshot,
 } from './actions'
 import styles from './pos.module.css'
+import { toast } from 'sonner'
 
 type CartLine = {
   productId: string
@@ -31,11 +36,14 @@ type CartLine = {
   unitPrice: number
   quantity: number
   maxStock: number
+  /** 0 = POS kritik stok uyarısı kapalı */
+  lowStockThreshold: number
   imageUrl: string | null
   barcode: string
 }
 
 const STOCK_POLL_MS = 6000
+const CRITICAL_STOCK_POLL_MS = 5 * 60 * 1000
 
 function mergeCartWithStock(
   cart: CartLine[],
@@ -63,7 +71,8 @@ function mergeCartWithStock(
     if (
       snap.stock !== line.maxStock ||
       snap.salePrice !== line.unitPrice ||
-      snap.name !== line.name
+      snap.name !== line.name ||
+      snap.lowStockThreshold !== line.lowStockThreshold
     ) {
       adjusted = true
     }
@@ -73,6 +82,7 @@ function mergeCartWithStock(
       unitPrice: snap.salePrice,
       quantity: qty,
       maxStock: snap.stock,
+      lowStockThreshold: snap.lowStockThreshold,
       imageUrl: snap.imageUrl ?? line.imageUrl ?? null,
       barcode: line.barcode,
     })
@@ -85,7 +95,7 @@ function mergeCartWithStock(
   return { cart: next, adjusted }
 }
 
-type Mode = 'sale' | 'refund'
+type Mode = 'sale' | 'refund' | 'stock'
 
 function orderStatusLabelTr(status: string): string {
   switch (status) {
@@ -127,6 +137,7 @@ export function PosClient() {
   const [message, setMessage] = useState<{ type: 'ok' | 'err' | 'info'; text: string } | null>(null)
   const [isPending, startTransition] = useTransition()
   const inputRef = useRef<HTMLInputElement>(null)
+  const stockBarcodeRef = useRef<HTMLInputElement>(null)
   const cashInputRef = useRef<HTMLInputElement>(null)
   const cartRef = useRef<CartLine[]>([])
 
@@ -144,10 +155,25 @@ export function PosClient() {
   const [paymentStep, setPaymentStep] = useState<'method' | 'cash' | null>(null)
   const [cashReceivedStr, setCashReceivedStr] = useState('')
 
+  const [criticalStockItems, setCriticalStockItems] = useState<CriticalStockRow[]>([])
+  const [notifDrawerOpen, setNotifDrawerOpen] = useState(false)
+
+  const [stockBarcodeInp, setStockBarcodeInp] = useState('')
+  const [stockDeltaStr, setStockDeltaStr] = useState('')
+  const [stockNote, setStockNote] = useState('')
+  const [stockPreview, setStockPreview] = useState<PosProduct | null>(null)
+
   cartRef.current = cart
 
   const focusBarcode = useCallback(() => {
     inputRef.current?.focus()
+  }, [])
+
+  const refreshCriticalStock = useCallback(() => {
+    startTransition(async () => {
+      const res = await listCriticalStockForPos()
+      if (res.ok) setCriticalStockItems(res.items)
+    })
   }, [])
 
   const runStockSync = useCallback((opts?: { silent?: boolean }) => {
@@ -188,8 +214,26 @@ export function PosClient() {
   }, [categoryId, mode])
 
   useEffect(() => {
+    if (mode !== 'sale') return
+    refreshCriticalStock()
+    const t = window.setInterval(refreshCriticalStock, CRITICAL_STOCK_POLL_MS)
+    return () => window.clearInterval(t)
+  }, [mode, refreshCriticalStock])
+
+  useEffect(() => {
+    if (!notifDrawerOpen) return
+    refreshCriticalStock()
+  }, [notifDrawerOpen, refreshCriticalStock])
+
+  useEffect(() => {
     if (mode === 'sale') focusBarcode()
   }, [mode, focusBarcode])
+
+  useEffect(() => {
+    if (mode !== 'stock') return
+    const t = window.setTimeout(() => stockBarcodeRef.current?.focus(), 0)
+    return () => window.clearTimeout(t)
+  }, [mode])
 
   useEffect(() => {
     if (paymentStep === 'cash') {
@@ -231,34 +275,54 @@ export function PosClient() {
       })
       return
     }
-    setCart((prev) => {
-      const idx = prev.findIndex((l) => l.productId === product.id)
-      if (idx === -1) {
+
+    const prev = cartRef.current
+    const idx = prev.findIndex((l) => l.productId === product.id)
+    const newQty = idx === -1 ? q : prev[idx].quantity + q
+    if (newQty > product.stock) {
+      setMessage({ type: 'err', text: `Stokta en fazla ${product.stock} adet var.` })
+      return
+    }
+
+    const th = product.lowStockThreshold
+    if (th > 0 && product.stock <= th) {
+      toast.warning(
+        `⚠️ Kritik stok: ${product.name} — depoda ${product.stock} adet (limit ≤${th})`,
+        {
+          duration: 4500,
+          id: `low-stock-${product.id}`,
+        },
+      )
+    }
+
+    setCart((prevCart) => {
+      const i = prevCart.findIndex((l) => l.productId === product.id)
+      if (i === -1) {
         return [
-          ...prev,
+          ...prevCart,
           {
             productId: product.id,
             name: product.name,
             unitPrice: product.salePrice,
             quantity: q,
             maxStock: product.stock,
+            lowStockThreshold: product.lowStockThreshold,
             imageUrl: product.imageUrl ?? null,
             barcode: product.barcode,
           },
         ]
       }
-      const next = [...prev]
-      const line = next[idx]
-      const newQty = line.quantity + q
-      if (newQty > product.stock) {
-        setMessage({ type: 'err', text: `Stokta en fazla ${product.stock} adet var.` })
-        return prev
-      }
-      next[idx] = {
+      const next = [...prevCart]
+      const line = next[i]
+      next[i] = {
         ...line,
-        quantity: newQty,
+        quantity: line.quantity + q,
+        name: product.name,
+        unitPrice: product.salePrice,
         maxStock: product.stock,
+        lowStockThreshold: product.lowStockThreshold,
         imageUrl: product.imageUrl ?? line.imageUrl ?? null,
+        barcode: product.barcode,
       }
       return next
     })
@@ -393,10 +457,11 @@ export function PosClient() {
         listProductsForPos(categoryId).then((r) => {
           if (r.ok) setCatalogProducts(r.products)
         })
+        refreshCriticalStock()
         focusBarcode()
       })
     },
-    [cart, categoryId, closePaymentModal, focusBarcode, runStockSync],
+    [cart, categoryId, closePaymentModal, focusBarcode, refreshCriticalStock, runStockSync],
   )
 
   const handleSelectPaymentMethod = (method: PosPaymentMethod) => {
@@ -423,6 +488,11 @@ export function PosClient() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (notifDrawerOpen) {
+          e.preventDefault()
+          setNotifDrawerOpen(false)
+          return
+        }
         if (paymentStep !== null) {
           e.preventDefault()
           closePaymentModal()
@@ -445,7 +515,7 @@ export function PosClient() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [closePaymentModal, mode, openPaymentModal, paymentStep, isPending])
+  }, [closePaymentModal, mode, notifDrawerOpen, openPaymentModal, paymentStep, isPending])
 
   const handleLoadRefund = (e: React.FormEvent) => {
     e.preventDefault()
@@ -539,6 +609,56 @@ export function PosClient() {
     })
   }
 
+  const handleStockLookupSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const code = stockBarcodeInp.trim()
+    if (!code) return
+    startTransition(async () => {
+      const res = await lookupProductForStockAdjust(code)
+      if (!res.ok) {
+        setMessage({ type: 'err', text: res.error })
+        setStockPreview(null)
+        return
+      }
+      setStockPreview(res.product)
+      setMessage(null)
+    })
+  }
+
+  const handleStockApplySubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!stockPreview) {
+      setMessage({ type: 'err', text: 'Önce barkodu yazıp «Bul» deyin.' })
+      return
+    }
+    const raw = stockDeltaStr.trim().replace(',', '.')
+    if (!raw) {
+      setMessage({ type: 'err', text: 'Adet girin (+ giriş, − çıkış; tam sayı).' })
+      return
+    }
+    const delta = Math.trunc(Number(raw))
+    if (!Number.isFinite(delta) || delta === 0) {
+      setMessage({ type: 'err', text: 'Geçerli tam sayı girin (sıfır olamaz).' })
+      return
+    }
+    startTransition(async () => {
+      const res = await applyManualStockDelta(stockPreview.barcode, delta, stockNote || null)
+      if (!res.ok) {
+        setMessage({ type: 'err', text: res.error })
+        return
+      }
+      setMessage({
+        type: 'ok',
+        text: `${res.productName}: güncel stok ${res.newStock} adet.`,
+      })
+      toast.success(`Stok güncellendi: ${res.productName} → ${res.newStock} adet`)
+      setStockPreview((prev) => (prev ? { ...prev, stock: res.newStock } : null))
+      setStockDeltaStr('')
+      setStockNote('')
+      refreshCriticalStock()
+    })
+  }
+
   const filteredCatalog = catalogProducts.filter((p) =>
     productSearch.trim()
       ? p.name.toLowerCase().includes(productSearch.trim().toLowerCase()) ||
@@ -562,17 +682,30 @@ export function PosClient() {
   }, [categoryId, categoryGroups])
 
   const switchMode = (next: Mode) => {
+    if (next === 'stock') {
+      setStockBarcodeInp('')
+      setStockDeltaStr('')
+      setStockNote('')
+      setStockPreview(null)
+    }
     setMode(next)
     setMessage(null)
+    setNotifDrawerOpen(false)
     if (next === 'refund') {
       setRefundPreview(null)
       setRefundQtyByLine({})
     }
   }
 
+  const criticalCount = criticalStockItems.length
+
+  const toggleNotifDrawer = useCallback(() => {
+    setNotifDrawerOpen((prev) => !prev)
+  }, [])
+
   return (
     <div className={styles.wrap}>
-      {mode === 'refund' ? (
+      {mode === 'refund' || mode === 'stock' ? (
         <header className={styles.header}>
           <h1 className={styles.title}>POS</h1>
           <div className={styles.tabs} role="tablist">
@@ -584,15 +717,24 @@ export function PosClient() {
               Satış
             </button>
             <button
-              className={styles.tabActive}
+              className={mode === 'refund' ? styles.tabActive : styles.tab}
               onClick={() => switchMode('refund')}
               type="button"
             >
               İade
             </button>
+            <button
+              className={mode === 'stock' ? styles.tabActive : styles.tab}
+              onClick={() => switchMode('stock')}
+              type="button"
+            >
+              Stok
+            </button>
           </div>
           <p className={styles.hint}>
-            Tamamlanmış veya kısmi iade sipariş numarasını girin (ör. ORD-…).
+            {mode === 'refund'
+              ? 'Tamamlanmış veya kısmi iade sipariş numarasını girin (ör. ORD-…).'
+              : 'Barkodu yazın veya okutun; «Bul» ile ürünü seçip adet ile stok ekleyin veya düşürün.'}
           </p>
         </header>
       ) : null}
@@ -612,7 +754,7 @@ export function PosClient() {
         </div>
       )}
 
-      {mode === 'sale' ? (
+      {mode === 'sale' && (
         <>
           <div className={styles.posSaleShell}>
             <div className={styles.posTopBand}>
@@ -629,12 +771,35 @@ export function PosClient() {
                   >
                     İade
                   </button>
+                  <button
+                    className={styles.tab}
+                    onClick={() => switchMode('stock')}
+                    type="button"
+                  >
+                    Stok
+                  </button>
                 </div>
               </div>
-              <div aria-live="polite" className={styles.posTotalBoard}>
-                <span className={styles.posTotalBoardLabel}>TOPLAM</span>
-                <span className={styles.posTotalBoardValue}>{total.toFixed(2)}</span>
-                <span className={styles.posTotalBoardCur}>₺</span>
+              <div className={styles.posTopBandRight}>
+                <button
+                  aria-expanded={notifDrawerOpen}
+                  aria-label="Kritik stok bildirimleri"
+                  className={styles.posNotifyBell}
+                  onClick={toggleNotifDrawer}
+                  type="button"
+                >
+                  <span aria-hidden="true">🔔</span>
+                  {criticalCount > 0 ? (
+                    <span className={styles.posNotifyBadge}>
+                      {criticalCount > 99 ? '99+' : criticalCount}
+                    </span>
+                  ) : null}
+                </button>
+                <div aria-live="polite" className={styles.posTotalBoard}>
+                  <span className={styles.posTotalBoardLabel}>TOPLAM</span>
+                  <span className={styles.posTotalBoardValue}>{total.toFixed(2)}</span>
+                  <span className={styles.posTotalBoardCur}>₺</span>
+                </div>
               </div>
             </div>
             <p className={styles.posMicroHint}>
@@ -844,6 +1009,55 @@ export function PosClient() {
             </div>
           </div>
 
+          {notifDrawerOpen ? (
+            <>
+              <div
+                className={styles.posNotifyBackdrop}
+                onClick={() => setNotifDrawerOpen(false)}
+                role="presentation"
+              />
+              <aside
+                aria-labelledby="pos-notif-title"
+                aria-modal="true"
+                className={styles.posNotifyDrawer}
+                role="dialog"
+              >
+                <div className={styles.posNotifyDrawerHead}>
+                  <h2 className={styles.posNotifyDrawerTitle} id="pos-notif-title">
+                    Kritik stok
+                  </h2>
+                  <button
+                    aria-label="Kapat"
+                    className={styles.posNotifyClose}
+                    onClick={() => setNotifDrawerOpen(false)}
+                    type="button"
+                  >
+                    ×
+                  </button>
+                </div>
+                <p className={styles.posNotifySub}>
+                  Mevcut stok, ürünün kritik eşiğine eşit veya altında (POS’ta satışa açık
+                  ürünler).
+                </p>
+                <ul className={styles.posNotifyList}>
+                  {criticalStockItems.length === 0 ? (
+                    <li className={styles.posNotifyEmpty}>Şu an kritik ürün yok.</li>
+                  ) : (
+                    criticalStockItems.map((it) => (
+                      <li className={styles.posNotifyItem} key={it.id}>
+                        <span className={styles.posNotifyItemName}>{it.name}</span>
+                        <span className={styles.posNotifyItemMeta}>
+                          Stok {it.stock} · Eşik ≤{it.lowStockThreshold}
+                        </span>
+                        <span className={styles.posNotifyItemBc}>{it.barcode}</span>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </aside>
+            </>
+          ) : null}
+
           <footer className={styles.footer}>
             <button
               className={styles.payBtn}
@@ -986,7 +1200,9 @@ export function PosClient() {
             </div>
           )}
         </>
-      ) : (
+      )}
+
+      {mode === 'refund' && (
         <section className={styles.refundPanel}>
           <form className={styles.refundForm} onSubmit={handleLoadRefund}>
             <input
@@ -1071,6 +1287,77 @@ export function PosClient() {
                 </button>
               ) : null}
             </div>
+          )}
+        </section>
+      )}
+
+      {mode === 'stock' && (
+        <section className={styles.stockPanel}>
+          <form className={styles.stockLookupForm} onSubmit={handleStockLookupSubmit}>
+            <label className={styles.stockLbl} htmlFor="pos-stock-bc">
+              Barkod
+            </label>
+            <div className={styles.stockRow}>
+              <input
+                ref={stockBarcodeRef}
+                autoComplete="off"
+                className={styles.barcodeInput}
+                id="pos-stock-bc"
+                inputMode="numeric"
+                onChange={(e) => setStockBarcodeInp(e.target.value)}
+                placeholder="Yazın veya okutun"
+                value={stockBarcodeInp}
+              />
+              <button className={styles.btnSecondary} disabled={isPending} type="submit">
+                Bul
+              </button>
+            </div>
+          </form>
+
+          {stockPreview ? (
+            <div className={styles.stockCard}>
+              <div className={styles.stockCardHead}>
+                <strong>{stockPreview.name}</strong>
+                <span className={styles.stockCardMeta}>
+                  Mevcut stok: <strong>{stockPreview.stock}</strong> · Kritik eşik:{' '}
+                  {stockPreview.lowStockThreshold}
+                </span>
+              </div>
+              <form className={styles.stockApplyForm} onSubmit={handleStockApplySubmit}>
+                <label className={styles.stockLbl} htmlFor="pos-stock-delta">
+                  Adet değişimi (+ giriş, − çıkış)
+                </label>
+                <p className={styles.stockHelp}>
+                  Pozitif sayı mal girişi (hareket: satın alma), negatif düzeltme / düşüm (hareket:
+                  düzeltme).
+                </p>
+                <input
+                  className={styles.stockDeltaInput}
+                  id="pos-stock-delta"
+                  inputMode="text"
+                  onChange={(e) => setStockDeltaStr(e.target.value)}
+                  placeholder="örn. 24 veya −3"
+                  type="text"
+                  value={stockDeltaStr}
+                />
+                <label className={styles.stockLbl} htmlFor="pos-stock-note">
+                  Not (isteğe bağlı)
+                </label>
+                <textarea
+                  className={styles.stockNoteInput}
+                  id="pos-stock-note"
+                  onChange={(e) => setStockNote(e.target.value)}
+                  placeholder="Tedarik, fire, sayım…"
+                  rows={2}
+                  value={stockNote}
+                />
+                <button className={styles.stockApplyBtn} disabled={isPending} type="submit">
+                  Stoğu güncelle
+                </button>
+              </form>
+            </div>
+          ) : (
+            <p className={styles.stockEmptyHint}>Barkod girip «Bul» ile ürün seçin.</p>
           )}
         </section>
       )}

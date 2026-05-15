@@ -1460,6 +1460,34 @@ button.navPrimary {
   background: #e5e7eb;
 }
 
+/* İyzico ödeme — sepet üzerinde tam ekran panel (yeni sekme yok) */
+.iyzicoPayOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(17, 24, 39, 0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+  overflow-y: auto;
+  animation: authFadeIn 0.2s ease;
+}
+
+/* İyzico widget'ı tek başına (ek panel yok) */
+.iyzicoPaySolo {
+  width: min(460px, 100%);
+  margin: 1.25rem auto 2rem;
+}
+
+.iyzicoPayMount {
+  min-height: 280px;
+}
+
+.iyzicoPayMount :global(iframe) {
+  max-width: 100%;
+}
+
 .navPhone {
   max-width: 11rem;
   overflow: hidden;
@@ -3138,6 +3166,66 @@ button.navPrimary {
 .orderHistoryRight strong {
   color: var(--purple);
   font-size: 1.05rem;
+}
+
+.orderStatusBadge {
+  display: inline-block;
+  margin-top: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.orderDeliveryTrack {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.orderDeliveryTrack li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.orderDeliveryDot {
+  display: inline-block;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.orderDeliveryStepDone .orderDeliveryDot {
+  background: #16a34a;
+}
+
+.orderDeliveryStepCurrent {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.orderDeliveryStepCurrent .orderDeliveryDot {
+  background: var(--purple);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.35);
+}
+
+.orderDeliveryStepTodo .orderDeliveryDot {
+  opacity: 0.45;
+}
+
+.pastOrdersStatus {
+  font-size: 0.7rem;
+  color: var(--purple);
+  font-weight: 600;
 }
 
 /* Nav — Sepet (giriş sonrası) */
